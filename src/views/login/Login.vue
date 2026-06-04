@@ -52,11 +52,12 @@
    <i class="fa-solid fa-envelope mt-1"></i>
     <input type="email" name="" id="" class="w-10/11 focus:outline-none px-2" placeholder="Email" v-model="loginForm.email">
 </div>
+
 <div class="flex bg-gray-100 rounded-sm px-1 py-1 mt-2">
    <i class="fa-solid fa-unlock mt-1"></i>
     <input type="password" name="" id="" class="w-10/11 focus:outline-none px-2" placeholder="Password" v-model="loginForm.password">
 </div>
-<button class="text-xs bg-emerald-300 text-black px-9 py-2 rounded-3xl mt-2 ml-5 cursor-pointer" @click="handleLogin">SIGN IN</button>
+<button class="text-xs bg-emerald-300 text-black px-9 py-2 rounded-3xl mt-2 ml-5 cursor-pointer" @click="handleLogin">{{ isLoading?"Loading..." :"SIGN IN" }}</button>
 </div>
     </div>
 </div>
@@ -69,21 +70,28 @@ import { useRouter } from 'vue-router';
 const authStore = useAuthStore();
 const router = useRouter();
 const signIn = ref(false)
-const loginForm = {
-   email:ref(''),
-   password:ref('')
-}
-const handleLogin = ()=>{
+const isLoading = ref(false)
+const loginForm = ref({
+   email:'',
+   password:''
+})
+
+
+const handleLogin = async()=>{
+    isLoading.value = true
     try{
-        authStore.login(loginForm);
-         router.push({name:'home'})
+    await authStore.login(loginForm.value);
+        console.log('login credentials',loginForm.value)
+        console.log('I am about to redirect now...');
+        isLoading.value = false
+       router.push('/AdminPanel')
+       
     }catch(error){
         console.log('error while login',error)
+        isLoading.value = false
     }
 }
 
 </script>
-
 <style>
-
 </style>

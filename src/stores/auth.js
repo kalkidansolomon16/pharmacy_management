@@ -2,27 +2,36 @@ import { defineStore } from "pinia";
 import { ref } from "vue";
 import api from "@/lib/axios";
 import { useRouter } from "vue-router";
+import axios from "axios";
 
 export const useAuthStore = defineStore('auth',()=>{
     const user = ref(null);
     const router = useRouter()
-
-    async function  getUser(){
-        try{
-
-            const response = await api.get('/api/users')
-            user.value = response.data;
-        }catch(error){
-            user.value = null
-            console.log(error)
-        }
-    }
-    async function login(credentials){
+  async function login(credentials){
      await api.get('/sanctum/csrf-cookie')
-     await api.post('/api/login',credentials);
-     await getUser();
+     const response = await api.post('/api/login',{
+        email:credentials.email,
+        password:credentials.password
+     });
+     const token  = response.data.token
+     console.log('token',response.data.token)
+     const auth_user = response.data.user
+    //console.log('token',response.data.token)    
+    //console.log('user',JSON.stringify(user))
+     console.log('auth user',auth_user)
+     localStorage.setItem('Auth_Token',token)
+     localStorage.setItem('auth_user',JSON.stringify(auth_user))
+     axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
+   
     
     }
+    async function  getUser(){
+        const token = localStorage.getItem('Auth_Token')
+        console.log('token from getUser function',token)
+   user.value = localStorage.getItem('auth_user');
+   console.log('userrr',user.value)
+    }
+  
     async function logout(){
         await api.post('/api/logout')
         user.value = null;
