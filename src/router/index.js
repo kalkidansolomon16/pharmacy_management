@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomePage from '../views/HomePage.vue'
+import AdminPanel from '../views/AdminPanel.vue'
 import Login from '../views/login/Login.vue'
 import { useAuthStore } from '@/stores/auth'
 
@@ -19,6 +20,12 @@ const router = createRouter({
       component: Login,
       meta:{guestOnly:true}
     },
+      {
+      path: '/AdminPanel',
+      name: 'AdminPanel',
+      component: AdminPanel,
+      meta:{requiresAuth:true}
+    },
     
     // {
     //   path: '/about',
@@ -31,13 +38,19 @@ const router = createRouter({
 router.beforeEach(async(to,from,next)=>{
 const authStore = useAuthStore();
 if(!authStore.user){
-  await authStore.getUser();
+  try{
+
+    await authStore.getUser();
+  }catch(error){
+    authStore.user = null;
+  }
 }
-if(to.meta.requiresAuth && !authStore.user){
+const isAuthenticated = !!authStore.user;
+if(to.meta.requiresAuth && !isAuthenticated){
   next({name:'Login'})
 }
-else if(to.meta.guestOnly && authStore.user){
-  next({name:'home'});
+else if(to.meta.guestOnly && isAuthenticated){
+  next({name:'AdminPanel'});
 }
 else{
   next();

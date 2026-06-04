@@ -1,8 +1,8 @@
 <template>
+    <Navbar/>
 <div>
-<Navbar/>
-<div class="bg-green-100 p-5 rounded-md">
-<div class="flex justify-between w-full bg-green-200 p-1">
+<div class="bg-green-100 p-5 rounded-md ">
+<div class="flex justify-between w-full bg-green-200 p-1 mt-10">
     <div class="">
         <h1 class="text-white font-bold ml-5">Manage Your Pharmacies Here</h1>
         <p class="text-xs ml-5">Lorem ipsum, dolor sit amet consectetur adipisicing elit.sit deserunt iure non officiis praesentium culpa.</p>
