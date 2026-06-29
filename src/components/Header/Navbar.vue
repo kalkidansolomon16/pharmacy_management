@@ -5,7 +5,7 @@
     <img src="/logo/cfcbec57b9cce056db5f294f33e7d599.jpg" alt="" class="w-1/8 rounded-full h-1/3">
 <p class="w-2/3 text-sm font-semibold  ml-16 fixed">pharmacy inventory managemet</p>
 <div @click="toggleNavBar" v-if="!showNavBar">
-<i class="fa-solid fa-bars text-xl"></i>
+<i class="fa-solid fa-bars text-xl cursor-pointer"></i>
 </div>
     </div>
     <div class="flex justify-end nav-div absolute left-40 top-0" v-if="showNavBar">

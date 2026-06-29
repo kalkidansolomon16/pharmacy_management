@@ -1,8 +1,8 @@
 <template>
     <Navbar/>
 <div>
-<div class="bg-green-100 p-5 rounded-md ">
-<div class="flex justify-between w-full bg-green-200 p-1 mt-10">
+<div class=" p-5 rounded-md ">
+<div class="flex justify-between w-full  p-1 mt-10">
     <div class="">
         <h1 class="text-white font-bold ml-5">Manage Your Pharmacies Here</h1>
         <p class="text-xs ml-5">Lorem ipsum, dolor sit amet consectetur adipisicing elit.sit deserunt iure non officiis praesentium culpa.</p>
@@ -12,7 +12,7 @@
         <img src="/images/beautiful-young-female-doctor-looking-camera-office_1301-7807.avif" alt="" class=" rounded-md ">
     </div> 
 </div>
-<div class="bg-white pt-5">
+<div class=" pt-5">
 <h1 class="text-center font-bold">Manage Medicines</h1>
 <p class="text-center text-xs">help to manage medicines</p>
 <div class="flex mt-5 px-1">
@@ -39,7 +39,7 @@
         <img src="/images/360_F_527210234_QKG77DVk3OdWmr8xIfvW1Bl8Za3aMbfx.jpg" alt="" class="h-40">
     </div>
 </div>
-<div class="bg-white pt-5">
+<div class=" pt-5">
 <h1 class="text-center font-bold">Manage Medicines</h1>
 <p class="text-center text-xs">help to manage medicines</p>
 <div class="flex mt-5 px-1">
@@ -75,7 +75,7 @@
    
 </div>
 </div>
-<div class="flex justify-between w-full bg-white p-1 mt-4">
+<div class="flex justify-between w-full  p-1 mt-4">
     <div class="">
         <h1 class="text-black font-bold ml-5 text-xs">Manage Your Pharmacies Here</h1>
         <p class="text-xs ml-5">Lorem ipsum, dolor sit amet consectetur adipisicing elit.sit deserunt iure non officiis praesentium culpa.</p>
