@@ -1,0 +1,163 @@
+import { computed, ref } from 'vue'
+
+/**
+ * Minimal reactive i18n: English and Amharic. Missing Amharic strings fall back to English.
+ */
+const messages = {
+  en: {
+    'brand.tagline': 'Find your medicine nearby',
+    'nav.home': 'Home',
+    'nav.findMedicine': 'Find medicine',
+    'nav.pharmacies': 'Pharmacies',
+    'nav.checkPrescription': 'Check prescription',
+    'nav.forBusiness': 'For pharmacies & hospitals',
+    'nav.signIn': 'Sign in',
+    'nav.getStarted': 'Get started',
+    'nav.cart': 'Cart',
+    'nav.dashboard': 'Dashboard',
+    'nav.myOrders': 'My orders',
+    'nav.profile': 'Profile & security',
+    'nav.signOut': 'Sign out',
+    'nav.inventory': 'Inventory',
+    'nav.expiry': 'Expiry tracker',
+    'nav.stockMovements': 'Stock movements',
+    'nav.orders': 'Online orders',
+    'nav.pos': 'Point of sale',
+    'nav.patients': 'Patients',
+    'nav.prescriptions': 'Prescriptions',
+    'nav.newPrescription': 'Write prescription',
+    'nav.reports': 'Reports',
+    'nav.team': 'Team',
+    'nav.activity': 'Audit log',
+    'nav.organization': 'Organization',
+    'nav.tenants': 'Organizations',
+    'nav.catalog': 'Medicine catalogue',
+    'nav.notifications': 'Notifications',
+    'section.workspace': 'Workspace',
+    'section.manage': 'Management',
+    'section.platform': 'Platform',
+    'hero.badge': 'EFDA-licensed pharmacies across Ethiopia',
+    'hero.title1': 'Find the medicine you need,',
+    'hero.title2': 'at a pharmacy near you.',
+    'hero.subtitle': 'Compare prices in Birr, check what is in stock right now, and reserve with your prescription - from Bole to Bahir Dar.',
+    'hero.searchPlaceholder': 'Search medicine, e.g. Amoxicillin, Coartem, Paracetamol',
+    'hero.anyCity': 'Any city',
+    'hero.search': 'Search',
+    'hero.popular': 'Popular:',
+    'common.search': 'Search',
+    'common.save': 'Save changes',
+    'common.cancel': 'Cancel',
+    'common.close': 'Close',
+    'common.add': 'Add',
+    'common.edit': 'Edit',
+    'common.view': 'View',
+    'common.export': 'Export',
+    'common.filters': 'Filters',
+    'common.all': 'All',
+    'common.loading': 'Loading…',
+    'common.noResults': 'Nothing here yet',
+    'common.inStock': 'In stock',
+    'common.lowStock': 'Low stock',
+    'common.outOfStock': 'Out of stock',
+    'common.prescriptionRequired': 'Prescription required',
+    'common.addToCart': 'Add to cart',
+    'common.today': 'Today',
+    'common.calendar': 'Calendar',
+    'auth.welcomeBack': 'Welcome back',
+    'auth.signInSubtitle': 'Sign in to manage orders, inventory and prescriptions.',
+    'auth.email': 'Email address',
+    'auth.password': 'Password',
+    'auth.noAccount': "Don't have an account?",
+    'auth.createAccount': 'Create an account',
+    'auth.haveAccount': 'Already have an account?',
+  },
+  am: {
+    'brand.tagline': 'መድኃኒትዎን በቅርብ ያግኙ',
+    'nav.home': 'መነሻ',
+    'nav.findMedicine': 'መድኃኒት ይፈልጉ',
+    'nav.pharmacies': 'ፋርማሲዎች',
+    'nav.checkPrescription': 'የሐኪም ማዘዣ ያረጋግጡ',
+    'nav.forBusiness': 'ለፋርማሲና ሆስፒታሎች',
+    'nav.signIn': 'ግባ',
+    'nav.getStarted': 'ይጀምሩ',
+    'nav.cart': 'ጋሪ',
+    'nav.dashboard': 'ዳሽቦርድ',
+    'nav.myOrders': 'ትዕዛዞቼ',
+    'nav.profile': 'መገለጫና ደህንነት',
+    'nav.signOut': 'ውጣ',
+    'nav.inventory': 'የመድኃኒት ክምችት',
+    'nav.expiry': 'የአገልግሎት ጊዜ መከታተያ',
+    'nav.stockMovements': 'የክምችት እንቅስቃሴ',
+    'nav.orders': 'የኦንላይን ትዕዛዞች',
+    'nav.pos': 'ሽያጭ (POS)',
+    'nav.patients': 'ታካሚዎች',
+    'nav.prescriptions': 'የሐኪም ማዘዣዎች',
+    'nav.newPrescription': 'ማዘዣ ይጻፉ',
+    'nav.reports': 'ሪፖርቶች',
+    'nav.team': 'ሠራተኞች',
+    'nav.activity': 'የኦዲት መዝገብ',
+    'nav.organization': 'ድርጅት',
+    'nav.tenants': 'ድርጅቶች',
+    'nav.catalog': 'የመድኃኒት ካታሎግ',
+    'nav.notifications': 'ማሳወቂያዎች',
+    'section.workspace': 'የሥራ ቦታ',
+    'section.manage': 'አስተዳደር',
+    'section.platform': 'መድረክ',
+    'hero.badge': 'በመላው ኢትዮጵያ ፈቃድ ያላቸው ፋርማሲዎች',
+    'hero.title1': 'የሚፈልጉትን መድኃኒት፣',
+    'hero.title2': 'በአቅራቢያዎ ካለ ፋርማሲ ያግኙ።',
+    'hero.subtitle': 'ዋጋዎችን በብር ያወዳድሩ፣ አሁን ያለውን ክምችት ይመልከቱ፣ በሐኪም ማዘዣዎ ያስይዙ - ከቦሌ እስከ ባሕር ዳር።',
+    'hero.searchPlaceholder': 'መድኃኒት ይፈልጉ፣ ለምሳሌ አሞክሲሲሊን፣ ኮአርተም',
+    'hero.anyCity': 'ሁሉም ከተሞች',
+    'hero.search': 'ፈልግ',
+    'hero.popular': 'ተወዳጅ፦',
+    'common.search': 'ፈልግ',
+    'common.save': 'አስቀምጥ',
+    'common.cancel': 'ሰርዝ',
+    'common.close': 'ዝጋ',
+    'common.add': 'ጨምር',
+    'common.edit': 'አስተካክል',
+    'common.view': 'ተመልከት',
+    'common.export': 'ላክ',
+    'common.filters': 'ማጣሪያ',
+    'common.all': 'ሁሉም',
+    'common.loading': 'በመጫን ላይ…',
+    'common.noResults': 'እስካሁን ምንም የለም',
+    'common.inStock': 'አለ',
+    'common.lowStock': 'ጥቂት ቀርቷል',
+    'common.outOfStock': 'አልቋል',
+    'common.prescriptionRequired': 'የሐኪም ማዘዣ ያስፈልጋል',
+    'common.addToCart': 'ወደ ጋሪ ጨምር',
+    'common.today': 'ዛሬ',
+    'common.calendar': 'የቀን አቆጣጠር',
+    'auth.welcomeBack': 'እንኳን ደህና መጡ',
+    'auth.signInSubtitle': 'ትዕዛዞችን፣ ክምችትንና ማዘዣዎችን ለማስተዳደር ይግቡ።',
+    'auth.email': 'ኢሜይል',
+    'auth.password': 'የይለፍ ቃል',
+    'auth.noAccount': 'መለያ የለዎትም?',
+    'auth.createAccount': 'መለያ ይክፈቱ',
+    'auth.haveAccount': 'መለያ አለዎት?',
+  },
+}
+
+const stored = (() => {
+  try { return localStorage.getItem('medlink.locale') } catch { return null }
+})()
+
+export const locale = ref(stored === 'am' ? 'am' : 'en')
+
+export function setLocale(value) {
+  locale.value = value === 'am' ? 'am' : 'en'
+  document.documentElement.lang = locale.value
+  try { localStorage.setItem('medlink.locale', locale.value) } catch { /* private mode */ }
+}
+
+export function t(key, fallback) {
+  return messages[locale.value]?.[key] ?? messages.en[key] ?? fallback ?? key
+}
+
+export function useI18n() {
+  return { t, locale: computed(() => locale.value), setLocale, isAmharic: computed(() => locale.value === 'am') }
+}
+
+setLocale(locale.value)
