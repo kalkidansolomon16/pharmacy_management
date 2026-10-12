@@ -26,7 +26,9 @@ const auth = useAuthStore()
 const meta = useMetaStore()
 const ui = useUiStore()
 const router = useRouter()
-const canManage = auth.can('inventory.manage')
+const canAdd = auth.can('inventory.create')
+const canEdit = auth.can('inventory.update')
+const canStock = auth.can('inventory.stock')
 
 const { rows, meta: page, loading, filters, page: current, reload } = useList('/inventory', { search: '', filter: '', category_id: '' }, { perPage: 20 })
 const alerts = ref(null)
@@ -84,15 +86,15 @@ const exportAs = (format) => download('/reports/inventory/export', { format }).c
         <button class="block w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50" @click="exportAs('csv')">Excel (CSV)</button>
         <button class="block w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50" @click="exportAs('pdf')">PDF valuation</button>
       </DropdownMenu>
-      <button v-if="canManage" class="btn btn-secondary" :disabled="scanning" title="Write off expired batches and send alerts" @click="scan">
+      <button v-if="canStock" class="btn btn-secondary" :disabled="scanning" title="Write off expired batches and send alerts" @click="scan">
         <AppSpinner v-if="scanning" /><ArrowPathIcon v-else class="size-4" /> Run expiry scan
       </button>
-      <button v-if="canManage" class="btn btn-primary" @click="adding = true"><PlusIcon class="size-4" /> Add medicine</button>
+      <button v-if="canAdd" class="btn btn-primary" @click="adding = true"><PlusIcon class="size-4" /> Add medicine</button>
     </PageHeader>
 
     <div v-if="alerts?.expired_with_stock_count" class="mb-4 flex items-center justify-between gap-4 rounded-2xl border border-rose-200 bg-rose-50 px-5 py-3 text-sm text-rose-800">
       <span><b>{{ alerts.expired_with_stock_count }} expired batch(es)</b> are still counted on the shelf. They can't be sold - run the expiry scan to write them off.</span>
-      <button v-if="canManage" class="btn btn-danger btn-sm" @click="scan">Write off now</button>
+      <button v-if="canStock" class="btn btn-danger btn-sm" @click="scan">Write off now</button>
     </div>
 
     <div class="card overflow-hidden">
@@ -136,9 +138,9 @@ const exportAs = (format) => download('/reports/inventory/export', { format }).c
         <template #cell-status="{ row }"><StatusBadge :status="row.stock_status" /></template>
         <template #cell-expiry="{ row }"><DateText :value="row.nearest_expiry" /></template>
         <template #cell-actions="{ row }">
-          <div v-if="canManage" class="flex justify-end gap-1" @click.stop>
-            <button class="btn btn-ghost btn-sm" title="Receive stock" @click="receiving = row"><TruckIcon class="size-4" /> Receive</button>
-            <button class="btn-icon size-8" title="Edit price" @click="editing = row"><PencilSquareIcon class="size-4" /></button>
+          <div v-if="canStock || canEdit" class="flex justify-end gap-1" @click.stop>
+            <button v-if="canStock" class="btn btn-ghost btn-sm" title="Receive stock" @click="receiving = row"><TruckIcon class="size-4" /> Receive</button>
+            <button v-if="canEdit" class="btn-icon size-8" title="Edit price" @click="editing = row"><PencilSquareIcon class="size-4" /></button>
           </div>
         </template>
       </DataTable>

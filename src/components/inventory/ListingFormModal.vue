@@ -14,6 +14,8 @@ import SearchInput from '@/components/ui/SearchInput.vue'
 import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 import MedicineAvatar from '@/components/ui/MedicineAvatar.vue'
 import AppSpinner from '@/components/ui/AppSpinner.vue'
+import MedicineFormModal from '@/components/inventory/MedicineFormModal.vue'
+import { useAuthStore } from '@/stores/auth'
 
 const props = defineProps({ open: Boolean, listing: { type: Object, default: null } })
 const emit = defineEmits(['close', 'saved'])
@@ -25,6 +27,14 @@ const search = ref('')
 const results = ref([])
 const selected = ref(null)
 const withBatch = ref(true)
+const auth = useAuthStore()
+// Not in the catalogue yet: pharmacies with the permission add it here and stock it straight away
+const addingMedicine = ref(false)
+const canAddMedicine = computed(() => auth.can('catalog.contribute') || auth.can('catalog.manage'))
+function medicineAdded(m) {
+  addingMedicine.value = false
+  if (m) selected.value = m
+}
 
 const form = useForm({})
 watch(() => props.open, (open) => {
@@ -79,11 +89,13 @@ async function submit() {
               <button type="button" class="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-brand-50" @click="selected = m">
                 <MedicineAvatar :form="m.dosage_form" size="sm" />
                 <span class="min-w-0 flex-1"><b class="block truncate text-sm text-slate-900">{{ m.display_name }}</b><span class="text-xs text-slate-500">{{ m.dosage_form }} · {{ m.category?.name }}</span></span>
+                <span v-if="m.review_status === 'pending'" class="chip bg-amber-50 text-amber-700 ring-amber-600/20">Awaiting review</span>
                 <span v-if="m.prescription_required" class="chip bg-rose-50 text-rose-700 ring-rose-600/15">Rx</span>
               </button>
             </li>
           </ul>
-          <p v-else-if="search.length >= 2" class="mt-2 text-sm text-slate-500">No matches. Ask the platform team to add it to the catalogue.</p>
+          <p v-else-if="search.length >= 2" class="mt-2 text-sm text-slate-500">No matches.<template v-if="!canAddMedicine"> Ask your pharmacy admin to add it.</template></p>
+          <button v-if="canAddMedicine" type="button" class="btn btn-ghost btn-sm mt-2 px-0 text-brand-700" @click="addingMedicine = true">+ Can't find it? Add a new medicine</button>
           <p v-if="form.errors.value.medicine_id" class="field-error">{{ form.errors.value.medicine_id }}</p>
         </template>
       </div>
@@ -118,4 +130,5 @@ async function submit() {
       </button>
     </template>
   </AppModal>
+  <MedicineFormModal :open="addingMedicine" :initial-name="search" @close="addingMedicine = false" @saved="medicineAdded" />
 </template>

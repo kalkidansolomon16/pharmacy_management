@@ -1,11 +1,14 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { ClipboardDocumentCheckIcon, MinusIcon, PlusIcon, PrinterIcon, ShieldExclamationIcon, TrashIcon, XMarkIcon } from '@heroicons/vue/24/outline'
+import { ArrowPathIcon, ClipboardDocumentCheckIcon, MinusIcon, PlusIcon, PrinterIcon, ShieldCheckIcon, ShieldExclamationIcon, SignalSlashIcon, TrashIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import { CheckCircleIcon } from '@heroicons/vue/24/solid'
+import { useRoute } from 'vue-router'
 import api from '@/lib/api'
 import { money } from '@/lib/format'
 import { useMetaStore } from '@/stores/meta'
 import { useUiStore } from '@/stores/ui'
+import { useAuthStore } from '@/stores/auth'
+import { useOfflineStore, uuid } from '@/stores/offline'
 import SearchInput from '@/components/ui/SearchInput.vue'
 import MedicineAvatar from '@/components/ui/MedicineAvatar.vue'
 import DateText from '@/components/ui/DateText.vue'
@@ -15,6 +18,9 @@ import ReceiptPrint from '@/components/orders/ReceiptPrint.vue'
 
 const meta = useMetaStore()
 const ui = useUiStore()
+const auth = useAuthStore()
+const offline = useOfflineStore()
+const PRODUCTS_CACHE = 'medlink.pos.products'
 
 const query = ref('')
 const products = ref([])
@@ -27,10 +33,18 @@ const sale = reactive({ customer_name: '', customer_phone: '', payment_method: '
 const submitting = ref(false)
 const receipt = ref(null)
 const errors = ref({})
+// Insurance / credit billing: the payer's share goes on the monthly claim, the patient pays the co-pay
+const coverage = reactive({ open: false, payers: [], payer_id: '', member_number: '', membership: null, checking: false })
 
+const route = useRoute()
 onMounted(() => {
   meta.load()
   search()
+  // Opened from the e-Prescription inbox: load that prescription straight away
+  if (route.query.rx) {
+    rxCode.value = String(route.query.rx)
+    loadPrescription()
+  }
 })
 
 let timer
@@ -43,13 +57,58 @@ async function search() {
   searching.value = true
   try {
     products.value = (await api.get('/pos/products', { params: { q: query.value } })).data.data
+    if (!query.value) {
+      try { localStorage.setItem(PRODUCTS_CACHE, JSON.stringify(products.value)) } catch { /* quota */ }
+    }
+  } catch (e) {
+    if (e.status !== 0) throw e
+    // Offline: search the last product list this device saw
+    const cached = (() => { try { return JSON.parse(localStorage.getItem(PRODUCTS_CACHE) || '[]') } catch { return [] } })()
+    const q = query.value.trim().toLowerCase()
+    products.value = cached.filter((p) => !q || [p.medicine.display_name, p.medicine.brand_name, p.medicine.barcode].filter(Boolean).some((v) => String(v).toLowerCase().includes(q)))
   } finally {
     searching.value = false
   }
 }
 
+/** GS1 DataMatrix on medicine packs: ]d2 / (01).. / 01 + 14-digit GTIN. */
+const looksLikeGs1 = (code) => /^(\]d2|\]C1|\(01\)|01\d{14})/.test(code.trim())
+
+async function scanGs1(code) {
+  try {
+    const { data } = await api.get('/scan', { params: { code } })
+    data.data.warnings.forEach((w) => ui.error(w, 'Scanned pack'))
+    if (data.data.listing && !data.data.warnings.some((w) => w.includes('EXPIRED'))) add(data.data.listing)
+    else if (!data.data.listing) ui.error('This product is not in your inventory.', 'Scanned pack')
+  } catch (e) {
+    ui.error(e.message)
+  }
+  query.value = ''
+}
+
+async function openCoverage() {
+  coverage.open = !coverage.open
+  if (coverage.open && !coverage.payers.length) coverage.payers = (await api.get('/payers', { params: { per_page: 100 } })).data.data
+}
+
+async function verifyMember() {
+  coverage.checking = true
+  try {
+    const { data } = await api.post('/memberships/verify', { payer_id: coverage.payer_id, member_number: coverage.member_number })
+    coverage.membership = data.data
+    data.data.is_valid ? ui.success(data.message) : ui.error(data.message)
+  } catch (e) {
+    coverage.membership = null
+    ui.error(e.message)
+  } finally {
+    coverage.checking = false
+  }
+}
+const clearCoverage = () => Object.assign(coverage, { membership: null, member_number: '', open: false })
+
 /** Barcode scanners type the code and press Enter: add the single match straight to the ticket. */
 function onEnter() {
+  if (looksLikeGs1(query.value)) return scanGs1(query.value)
   if (products.value.length === 1) {
     add(products.value[0])
     query.value = ''
@@ -100,26 +159,54 @@ function clearRx() {
 async function complete() {
   submitting.value = true
   errors.value = {}
+  const payload = {
+    items: lines.value.map((l) => ({ pharmacy_medicine_id: l.listing.id, quantity: l.quantity })),
+    prescription_code: rx.value?.prescription.reference_code ?? null,
+    ...sale,
+    customer_phone: sale.customer_phone || null,
+    customer_name: sale.customer_name || null,
+    membership_id: coverage.membership?.is_valid ? coverage.membership.id : null,
+    client_uuid: uuid(), // makes retries and offline replays safe
+  }
   try {
-    const { data } = await api.post('/pos/sales', {
-      items: lines.value.map((l) => ({ pharmacy_medicine_id: l.listing.id, quantity: l.quantity })),
-      prescription_code: rx.value?.prescription.reference_code ?? null,
-      ...sale,
-      customer_phone: sale.customer_phone || null,
-      customer_name: sale.customer_name || null,
-    })
+    const { data } = await api.post('/pos/sales', payload)
     ui.success(data.message)
     receipt.value = data.data
     lines.value = []
     clearRx()
     Object.assign(sale, { customer_name: '', customer_phone: '', payment_method: 'cash', discount: 0 })
+    clearCoverage()
     search()
   } catch (e) {
+    if (e.status === 0 && !payload.prescription_code) {
+      // No connection (or a power cut at the router): keep the sale on this device and sync later
+      offline.enqueueSale(payload, { total: total.value, items: lines.value.length })
+      receipt.value = offlineReceipt(payload)
+      ui.info('No connection - sale saved on this device and will sync automatically.', 'Saved offline')
+      lines.value = []
+      Object.assign(sale, { customer_name: '', customer_phone: '', payment_method: 'cash', discount: 0 })
+      return
+    }
     errors.value = e.errors
     ui.error(e.message, 'Sale not completed')
   } finally {
     submitting.value = false
   }
+}
+
+function offlineReceipt(payload) {
+  const items = lines.value.map((l) => ({ id: l.listing.id, medicine: l.listing.medicine, quantity: l.quantity, unit_price: l.listing.price, line_total: l.quantity * l.listing.price }))
+  return {
+    order_number: 'OFFLINE-' + payload.client_uuid.slice(0, 8).toUpperCase(), offline: true, created_at: new Date().toISOString(),
+    customer_name: payload.customer_name || 'Walk-in customer', items, subtotal: subtotal.value, discount: Number(sale.discount || 0),
+    total_amount: total.value, payment_method: payload.payment_method,
+  }
+}
+
+async function syncNow() {
+  const { synced } = await offline.flush()
+  if (synced) ui.success(synced + ' offline sale(s) synced')
+  search()
 }
 
 const lineError = (line) => errors.value[`items.${line.listing.id}`] ?? null
@@ -133,6 +220,19 @@ const printReceipt = () => window.print()
       <div>
         <p class="text-xs font-bold tracking-[0.16em] text-brand-600 uppercase">Point of sale</p>
         <h1 class="text-2xl font-extrabold tracking-tight text-slate-900">Counter sale</h1>
+      </div>
+
+      <div v-if="!offline.online || offline.pending" class="flex flex-wrap items-center gap-3 rounded-2xl px-4 py-3 text-sm" :class="offline.online ? 'bg-amber-50 text-amber-800 ring-1 ring-amber-200' : 'bg-slate-900 text-white'">
+        <SignalSlashIcon v-if="!offline.online" class="size-5 text-gold-400" />
+        <span class="flex-1">
+          <b>{{ offline.online ? 'Back online.' : 'You are offline.' }}</b>
+          {{ offline.online ? '' : 'Keep selling - sales are saved on this device.' }}
+          <template v-if="offline.pending"> {{ offline.pending }} sale(s) waiting to sync.</template>
+          <span v-if="offline.lastError" class="block text-xs opacity-80">Last sync problem: {{ offline.lastError }}</span>
+        </span>
+        <button v-if="offline.online && offline.pending" class="btn btn-secondary btn-sm" :disabled="offline.syncing" @click="syncNow">
+          <ArrowPathIcon class="size-4" :class="offline.syncing && 'animate-spin'" /> Sync now
+        </button>
       </div>
 
       <!-- Prescription loader -->
@@ -222,6 +322,20 @@ const printReceipt = () => window.print()
           <input v-model="sale.customer_name" class="input" placeholder="Customer name (optional)" />
           <input v-model="sale.customer_phone" class="input" placeholder="Phone (optional)" />
         </div>
+        <div v-if="auth.hasModule('insurance') && auth.can('insurance.view')" class="rounded-xl border border-slate-200 bg-white">
+          <button class="flex w-full items-center justify-between px-3 py-2 text-xs font-bold text-slate-600" @click="openCoverage">
+            <span class="flex items-center gap-1.5"><ShieldCheckIcon class="size-4 text-brand-600" /> {{ coverage.membership ? coverage.membership.payer?.name : 'Insurance / credit customer' }}</span>
+            <span v-if="coverage.membership" class="chip" :class="coverage.membership.is_valid ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/15' : 'bg-rose-50 text-rose-700 ring-rose-600/15'">{{ coverage.membership.is_valid ? 'co-pay ' + coverage.membership.effective_copay_percent + '%' : 'not valid' }}</span>
+          </button>
+          <div v-if="coverage.open" class="space-y-2 border-t border-slate-100 p-3">
+            <select v-model="coverage.payer_id" class="input py-1.5 text-sm"><option value="">Choose payer…</option><option v-for="p in coverage.payers" :key="p.id" :value="p.id">{{ p.name }}</option></select>
+            <div class="flex gap-2">
+              <input v-model="coverage.member_number" class="input flex-1 py-1.5 font-mono text-sm" placeholder="Member / ID number" />
+              <button class="btn btn-secondary btn-sm" :disabled="!coverage.payer_id || !coverage.member_number || coverage.checking" @click="verifyMember"><AppSpinner v-if="coverage.checking" /> Verify</button>
+            </div>
+            <p v-if="coverage.membership" class="text-xs text-slate-500">{{ coverage.membership.beneficiary_name }} · valid to {{ coverage.membership.valid_to || 'open' }} <button class="ml-1 font-semibold text-rose-600" @click="clearCoverage">remove</button></p>
+          </div>
+        </div>
         <div class="grid grid-cols-3 gap-1.5">
           <button v-for="p in meta.paymentMethods" :key="p.value" class="rounded-xl border px-2 py-2 text-xs font-bold transition" :class="sale.payment_method === p.value ? 'border-brand-500 bg-brand-600 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'" @click="sale.payment_method = p.value">
             {{ p.label.replace('Health insurance (CBHI / EHIS)', 'Insurance') }}
@@ -241,7 +355,7 @@ const printReceipt = () => window.print()
       </div>
     </aside>
 
-    <AppModal :open="!!receipt" title="Sale complete" size="sm" @close="receipt = null">
+    <AppModal :open="!!receipt" :title="receipt?.offline ? 'Saved offline' : 'Sale complete'" size="sm" @close="receipt = null">
       <ReceiptPrint v-if="receipt" :order="receipt" />
       <template #footer>
         <button class="btn btn-secondary" @click="receipt = null">New sale</button>

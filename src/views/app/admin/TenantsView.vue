@@ -27,10 +27,15 @@ async function setStatus(tenant, status) {
       : `All ${tenant.users_count ?? ''} users of this organization lose access to their workspace.`,
     confirmText: verbs[status],
     danger: status !== 'active',
+    // The organization is told why, in the app and by email
+    input: status === 'rejected'
+      ? { label: 'Reason (sent to the applicant)', placeholder: 'e.g. Licence number not found in the EFDA register', required: true }
+      : status === 'suspended' ? { label: 'Reason (optional, sent to the organization)', placeholder: 'e.g. Subscription unpaid for 2 months' } : undefined,
   })
   if (!ok) return
   try {
-    const { data } = await api.patch(`/admin/tenants/${tenant.id}/status`, { status })
+    const reason = typeof ok === 'string' ? ok : undefined
+    const { data } = await api.patch(`/admin/tenants/${tenant.id}/status`, { status, reason })
     ui.success(data.message)
     selected.value = null
     reload()
@@ -97,8 +102,10 @@ const columns = [
         <div><dt class="text-xs text-slate-400">Hours</dt><dd class="font-semibold">{{ selected.opening_hours || '—' }}</dd></div>
         <div><dt class="text-xs text-slate-400">Users · listings</dt><dd class="font-semibold">{{ selected.users_count }} · {{ selected.medicines_count }}</dd></div>
         <div v-if="selected.approved_at"><dt class="text-xs text-slate-400">Approved</dt><dd class="font-semibold"><DateText :value="selected.approved_at" /></dd></div>
+        <div v-if="selected.status_reason" class="col-span-2 rounded-xl bg-rose-50 p-3"><dt class="text-xs text-rose-500">Reason given ({{ selected.status }})</dt><dd class="font-semibold text-rose-800">{{ selected.status_reason }}</dd></div>
       </dl>
       <template #footer>
+        <button v-if="selected?.status === 'pending'" class="btn btn-ghost" @click="setStatus(selected, 'rejected')">Reject</button>
         <button v-if="selected?.status !== 'active'" class="btn btn-primary" @click="setStatus(selected, 'active')">Approve</button>
         <button v-else class="btn btn-soft-danger" @click="setStatus(selected, 'suspended')">Suspend</button>
       </template>

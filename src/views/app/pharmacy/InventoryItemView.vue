@@ -17,7 +17,8 @@ import ListingFormModal from '@/components/inventory/ListingFormModal.vue'
 
 const route = useRoute()
 const auth = useAuthStore()
-const canManage = auth.can('inventory.manage')
+const canEdit = auth.can('inventory.update')
+const canStock = auth.can('inventory.stock')
 
 const listing = ref(null)
 const movements = ref([])
@@ -85,9 +86,9 @@ function saved() {
             </div>
           </div>
         </div>
-        <div v-if="canManage" class="flex gap-2">
-          <button class="btn btn-secondary" @click="editing = true"><PencilSquareIcon class="size-4" /> Edit price</button>
-          <button class="btn btn-primary" @click="receiving = true"><TruckIcon class="size-4" /> Receive stock</button>
+        <div v-if="canEdit || canStock" class="flex gap-2">
+          <button v-if="canEdit" class="btn btn-secondary" @click="editing = true"><PencilSquareIcon class="size-4" /> Edit price</button>
+          <button v-if="canStock" class="btn btn-primary" @click="receiving = true"><TruckIcon class="size-4" /> Receive stock</button>
         </div>
       </div>
 
@@ -121,7 +122,7 @@ function saved() {
                 <td class="max-w-48 truncate text-xs text-slate-500">{{ b.supplier }}</td>
                 <td><DateText :value="b.received_at" /></td>
                 <td class="text-right">
-                  <button v-if="canManage && b.quantity > 0" class="btn btn-ghost btn-sm" @click="openAdjust(b)"><AdjustmentsVerticalIcon class="size-4" /> Adjust</button>
+                  <button v-if="canStock && b.quantity > 0" class="btn btn-ghost btn-sm" @click="openAdjust(b)"><AdjustmentsVerticalIcon class="size-4" /> Adjust</button>
                 </td>
               </tr>
               <tr v-if="!batches.length"><td colspan="7" class="py-10 text-center text-slate-500">No batches yet - receive stock to start selling.</td></tr>

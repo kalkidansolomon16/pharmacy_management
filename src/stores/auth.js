@@ -10,6 +10,11 @@ export const ROLE_LABELS = {
   hospital_admin: 'Hospital admin',
   doctor: 'Doctor',
   customer: 'Customer',
+  nurse: 'Nurse',
+  receptionist: 'Receptionist',
+  lab_technician: 'Lab technician',
+  cashier: 'Cashier',
+  owner: 'Owner',
 }
 
 export const useAuthStore = defineStore('auth', () => {
@@ -28,10 +33,17 @@ export const useAuthStore = defineStore('auth', () => {
   const isCustomer = computed(() => role.value === 'customer')
   const isStaffUser = computed(() => !!user.value && !isCustomer.value)
   const tenantActive = computed(() => !tenant.value || tenant.value.status === 'active')
-  const roleLabel = computed(() => ROLE_LABELS[role.value] ?? '')
+  // Built-in role labels live here; custom roles carry their own label from the server
+  const roleLabel = computed(() => ROLE_LABELS[role.value] ?? user.value?.role_label ?? '')
+  /** Modules switched on for the organization (pharmacy, clinical, lab, billing, insurance). */
+  const modules = computed(() => new Set(user.value?.modules ?? []))
+  const subscription = computed(() => user.value?.subscription ?? null)
 
   const can = (permission) => permissions.value.has(permission)
   const hasRole = (...roles) => roles.includes(role.value)
+  /** True when the user holds at least one of the permissions. */
+  const canAny = (...perms) => perms.some((p) => permissions.value.has(p))
+  const hasModule = (module) => modules.value.has(module)
 
   /** Where a user lands after signing in. */
   const homeRoute = computed(() => {
@@ -112,6 +124,7 @@ export const useAuthStore = defineStore('auth', () => {
   return {
     user, token, loaded, blockedReason,
     isAuthenticated, role, roleLabel, permissions, tenant, tenantType, isSuperAdmin, isCustomer, isStaffUser, tenantActive, homeRoute,
-    can, hasRole, login, register, registerOrganization, fetchMe, updateProfile, logout, clear, setUser,
+    modules, subscription, hasModule,
+    can, canAny, hasRole, login, register, registerOrganization, fetchMe, updateProfile, logout, clear, setUser,
   }
 })

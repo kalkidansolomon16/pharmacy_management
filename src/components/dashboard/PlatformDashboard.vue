@@ -17,13 +17,15 @@ const s = computed(() => props.data.stats)
 async function setStatus(tenant, status) {
   const ok = await ui.confirm({
     title: `${status === 'active' ? 'Approve' : 'Reject'} ${tenant.name}?`,
-    message: status === 'active' ? `Licence ${tenant.license_number} has been verified. The organization goes live immediately.` : 'The applicant will be notified.',
+    message: status === 'active' ? `Licence ${tenant.license_number} has been verified. The organization goes live immediately.` : 'The applicant is notified in the app and by email, with your reason.',
     confirmText: status === 'active' ? 'Approve' : 'Reject',
     danger: status !== 'active',
+    input: status === 'rejected' ? { label: 'Reason (sent to the applicant)', placeholder: 'e.g. Licence number not found in the EFDA register', required: true } : undefined,
   })
   if (!ok) return
   try {
-    const { data } = await api.patch(`/admin/tenants/${tenant.id}/status`, { status })
+    const reason = typeof ok === 'string' ? ok : undefined
+    const { data } = await api.patch(`/admin/tenants/${tenant.id}/status`, { status, reason })
     ui.success(data.message)
     emit('changed')
   } catch (e) {

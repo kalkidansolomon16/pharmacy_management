@@ -18,6 +18,7 @@ const accent = (p) => accents[p.id % accents.length]
           {{ pharmacy.name.charAt(0) }}
         </span>
         <div class="mb-9 flex gap-1.5">
+          <span v-if="pharmacy.distance_km != null" class="chip bg-sky-600 text-white ring-sky-700/30">{{ pharmacy.distance_km < 1 ? Math.round(pharmacy.distance_km * 1000) + ' m' : pharmacy.distance_km.toFixed(1) + ' km' }}</span>
           <span v-if="pharmacy.is_24_hours" class="chip bg-gold-400 text-brand-950 ring-gold-500/30">24/7</span>
           <span v-if="pharmacy.delivery_available" class="chip bg-white/90 text-brand-800 ring-white"><TruckIcon class="size-3.5" /> Delivery</span>
         </div>

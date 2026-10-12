@@ -3,7 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ExclamationTriangleIcon, PlusIcon, TrashIcon } from '@heroicons/vue/24/outline'
 import api from '@/lib/api'
-import { phone } from '@/lib/format'
+import { money, phone } from '@/lib/format'
 import { useForm } from '@/composables/useForm'
 import { useAuthStore } from '@/stores/auth'
 import PageHeader from '@/components/ui/PageHeader.vue'
@@ -30,9 +30,14 @@ const patientResults = ref([])
 const medQuery = ref('')
 const medResults = ref([])
 const form = useForm({ diagnosis: '', notes: '', validity_days: 30, items: [] })
+// e-Prescription routing: '' = patient chooses any pharmacy, otherwise a pharmacy id (own in-house pharmacy or a partner)
+const routeTo = ref('')
+const visitId = route.query.visit ? Number(route.query.visit) : null
 
 onMounted(async () => {
   if (route.query.patient) patient.value = (await api.get(`/patients/${route.query.patient}`)).data.data.patient
+  if (route.query.diagnosis) form.data.diagnosis = String(route.query.diagnosis)
+  if (auth.hasModule('pharmacy')) routeTo.value = auth.tenant?.id ?? ''
 })
 
 let pt, mt
@@ -50,7 +55,25 @@ function addMedicine(m) {
   form.data.items.push({ medicine: m, dosage: m.unit === 'tablet' || m.unit === 'capsule' ? `1 ${m.unit}` : '5 ml', frequency: '3 times daily', duration_days: 7, per_dose: 1, total_quantity: 21, instructions: '', touched: false })
   medQuery.value = ''
   medResults.value = []
+  loadAvailability(form.data.items[form.data.items.length - 1])
 }
+
+/** Live stock: our own pharmacy first, then MedLink pharmacies nearby (cheapest first). */
+async function loadAvailability(item) {
+  try {
+    item.availability = (await api.get(`/medicines/${item.medicine.id}/availability`)).data.data
+  } catch {
+    item.availability = null
+  }
+}
+
+const partnerOptions = computed(() => {
+  const seen = new Map()
+  for (const item of form.data.items) {
+    for (const o of item.availability?.cheapest_nearby ?? []) if (!seen.has(o.pharmacy_id)) seen.set(o.pharmacy_id, o)
+  }
+  return [...seen.values()].filter((o) => o.pharmacy_id !== auth.tenant?.id)
+})
 
 /** Suggest total = units per dose x doses per day x days (for solid forms); stays editable. */
 function suggest(item) {
@@ -73,10 +96,12 @@ async function submit() {
     diagnosis: form.data.diagnosis,
     notes: form.data.notes,
     validity_days: form.data.validity_days,
+    visit_id: visitId,
+    pharmacy_id: routeTo.value || null,
     items: form.data.items.map((i) => ({ medicine_id: i.medicine.id, dosage: i.dosage, frequency: i.frequency, duration_days: i.duration_days, total_quantity: i.total_quantity, instructions: i.instructions })),
   }
   const data = await form.submit(() => api.post('/prescriptions', payload)).catch(() => null)
-  if (data) router.push({ name: 'app.prescription', params: { id: data.data.id } })
+  if (data) router.push(visitId ? { name: 'app.visit', params: { id: visitId } } : { name: 'app.prescription', params: { id: data.data.id } })
 }
 </script>
 
@@ -114,10 +139,19 @@ async function submit() {
           <p v-if="form.errors.value.patient_id" class="field-error">{{ form.errors.value.patient_id }}</p>
         </div>
 
+        <p v-if="visitId" class="mt-4 rounded-xl bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-800">Linked to the current visit - you will return to it after issuing.</p>
+
         <h2 class="mt-8 font-bold text-slate-900">2. Clinical notes</h2>
         <div class="mt-4 space-y-4">
           <FormField label="Diagnosis" :error="form.errors.value.diagnosis"><textarea v-model="form.data.diagnosis" rows="2" class="input" placeholder="e.g. Uncomplicated malaria (RDT +)" /></FormField>
           <FormField label="Notes for the pharmacist"><textarea v-model="form.data.notes" rows="2" class="input" /></FormField>
+          <FormField label="Send to pharmacy" hint="The pharmacy sees it in its e-Prescription inbox and is notified" :error="form.errors.value.pharmacy_id">
+            <select v-model="routeTo" class="input">
+              <option value="">Patient chooses any pharmacy (QR / code)</option>
+              <option v-if="auth.hasModule('pharmacy')" :value="auth.tenant?.id">Our pharmacy (in-house)</option>
+              <option v-for="o in partnerOptions" :key="o.pharmacy_id" :value="o.pharmacy_id">{{ o.pharmacy }} · {{ o.area }}<template v-if="o.distance_km != null"> · {{ o.distance_km < 1 ? Math.round(o.distance_km * 1000) + ' m' : o.distance_km.toFixed(1) + ' km' }} away</template></option>
+            </select>
+          </FormField>
           <FormField label="Valid for" :error="form.errors.value.validity_days">
             <select v-model.number="form.data.validity_days" class="input">
               <option :value="7">7 days</option><option :value="14">14 days</option><option :value="30">30 days</option><option :value="60">60 days (chronic)</option><option :value="90">90 days (chronic)</option>
@@ -153,6 +187,13 @@ async function submit() {
               <MedicineAvatar :form="item.medicine.dosage_form" size="sm" />
               <p class="min-w-0 flex-1 truncate font-bold text-slate-900">{{ item.medicine.display_name }}</p>
               <button class="btn-icon size-8 hover:text-rose-600" @click="form.data.items.splice(i, 1)"><TrashIcon class="size-4" /></button>
+            </div>
+            <div v-if="item.availability" class="mt-2 flex flex-wrap gap-1.5 pl-10 text-xs">
+              <span v-if="item.availability.in_house.listed" class="chip" :class="item.availability.in_house.available >= item.total_quantity ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/15' : 'bg-amber-50 text-amber-700 ring-amber-600/20'">
+                In-house: {{ item.availability.in_house.available }} in stock<template v-if="item.availability.in_house.price"> · {{ money(item.availability.in_house.price) }}</template>
+              </span>
+              <span v-else-if="auth.hasModule('pharmacy')" class="chip bg-rose-50 text-rose-700 ring-rose-600/15">Not stocked in-house</span>
+              <span class="chip bg-slate-100 text-slate-600 ring-slate-500/15">{{ item.availability.nearby_count }} pharmacies nearby<template v-if="item.availability.cheapest_nearby?.length"> · from {{ money(item.availability.cheapest_nearby[0].price) }}<template v-if="item.availability.cheapest_nearby[0].distance_km != null"> · closest {{ item.availability.cheapest_nearby[0].distance_km.toFixed(1) }} km</template></template></span>
             </div>
             <div class="mt-4 grid gap-3 sm:grid-cols-5">
               <FormField label="Dose" :error="form.errors.value[`items.${i}.dosage`]"><input v-model="item.dosage" class="input" /></FormField>

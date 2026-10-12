@@ -54,6 +54,46 @@ const map = {
   // channels
   online: ['violet', 'Online'],
   walk_in: ['slate', 'Walk-in'],
+  // visits
+  waiting: ['amber', 'Waiting'],
+  in_consultation: ['sky', 'With doctor'],
+  awaiting_lab: ['violet', 'At the lab'],
+  awaiting_review: ['orange', 'Results back'],
+  urgent: ['rose', 'Urgent'],
+  normal: ['emerald', 'Normal'],
+  // lab
+  ordered: ['amber', 'Ordered'],
+  collected: ['sky', 'Sample taken'],
+  resulted: ['violet', 'Resulted'],
+  verified: ['emerald', 'Verified'],
+  high: ['orange', 'High'],
+  low: ['orange', 'Low'],
+  positive: ['rose', 'Positive'],
+  negative: ['emerald', 'Negative'],
+  // invoices & e-invoicing
+  issued: ['amber', 'Unpaid'],
+  partially_paid: ['orange', 'Part paid'],
+  awaiting_approval: ['violet', 'Awaiting insurer'],
+  void: ['slate', 'Void'],
+  draft: ['slate', 'Draft'],
+  accepted: ['emerald', 'Registered (MoR)'],
+  failed: ['rose', 'Rejected'],
+  not_required: ['slate', 'Not fiscal'],
+  // claims, approvals
+  submitted: ['sky', 'Submitted'],
+  approved: ['emerald', 'Approved'],
+  declined: ['rose', 'Declined'],
+  // purchasing & transfers
+  sent: ['sky', 'Sent'],
+  partially_received: ['orange', 'Part received'],
+  received: ['emerald', 'Received'],
+  requested: ['amber', 'Requested'],
+  dispatched: ['violet', 'In transit'],
+  credited: ['emerald', 'Credited'],
+  transfer_in: ['emerald', 'Transfer in'],
+  transfer_out: ['sky', 'Transfer out'],
+  // subscriptions
+  trial: ['violet', 'Free trial'],
 }
 
 const entry = computed(() => map[props.status] ?? ['slate', props.status.replace(/_/g, ' ')])

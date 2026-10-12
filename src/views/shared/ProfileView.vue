@@ -69,7 +69,7 @@ async function savePassword() {
             </FormField>
             <FormField label="Address" class="sm:col-span-2"><input v-model="profile.data.address" class="input" placeholder="Sub-city, woreda, house no." /></FormField>
             <FormField label="Language / ቋንቋ">
-              <select v-model="profile.data.locale" class="input"><option value="en">English</option><option value="am">አማርኛ (Amharic)</option></select>
+              <select v-model="profile.data.locale" class="input"><option value="en">English</option><option value="am">አማርኛ (Amharic)</option><option value="om">Afaan Oromoo</option></select>
             </FormField>
           </div>
           <div class="mt-6 flex justify-end"><button class="btn btn-primary" :disabled="profile.processing.value"><AppSpinner v-if="profile.processing.value" /> Save changes</button></div>

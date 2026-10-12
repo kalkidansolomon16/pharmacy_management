@@ -1,0 +1,20 @@
+{
+  "name": "MedLink Ethiopia",
+  "short_name": "MedLink",
+  "description": "Pharmacy, clinic and hospital management built for Ethiopia - works through power and network outages.",
+  "start_url": "/app/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#065f46",
+  "lang": "en",
+  "categories": ["medical", "business", "productivity"],
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Counter sale", "url": "/app/pos" },
+    { "name": "Patient queue", "url": "/app/queue" },
+    { "name": "Cashier", "url": "/app/cashier" }
+  ]
+}

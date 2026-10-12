@@ -42,14 +42,75 @@ const stepFields = [
 ]
 const err = (key) => form.errors.value[key]
 
+/** Messages for anything missing or mistyped on one step, keyed like the server's errors. */
+function checkStep(i) {
+  const o = org.value
+  const a = form.data.admin
+  const e = {}
+  const digits = (v) => (v || '').replace(/\D/g, '')
+  const isEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((v || '').trim())
+  if (i === 0) {
+    if (!o.name.trim()) e['organization.name'] = 'Enter the organization name.'
+    if (!o.license_number.trim()) e['organization.license_number'] = 'Enter the licence number.'
+    if (o.tin_number && digits(o.tin_number).length !== 10) e['organization.tin_number'] = 'The TIN must be exactly 10 digits.'
+    if (!o.phone.trim()) e['organization.phone'] = 'Enter a phone number.'
+    else if (digits(o.phone).length < 9) e['organization.phone'] = 'This phone number looks too short.'
+    if (o.email && !isEmail(o.email)) e['organization.email'] = 'Enter a valid email address, e.g. info@pharmacy.et'
+  }
+  if (i === 1) {
+    if (!o.region) e['organization.region'] = 'Choose a region.'
+    if (!o.city) e['organization.city'] = 'Choose a city.'
+  }
+  if (i === 2) {
+    if (!a.name.trim()) e['admin.name'] = "Enter the administrator's full name."
+    if (!a.email.trim()) e['admin.email'] = "Enter the administrator's email."
+    else if (!isEmail(a.email)) e['admin.email'] = 'Enter a valid email address.'
+    if (!a.phone.trim()) e['admin.phone'] = 'Enter a mobile number.'
+    else if (digits(a.phone).length < 9) e['admin.phone'] = 'This mobile number looks too short, e.g. 0911 234567.'
+    if (!a.password) e['admin.password'] = 'Choose a password.'
+    else if (a.password.length < 8 || !/[a-z]/.test(a.password) || !/[A-Z]/.test(a.password) || !/\d/.test(a.password)) {
+      e['admin.password'] = 'Use at least 8 characters with upper and lower case letters and a number.'
+    }
+    if (a.password && a.password !== a.password_confirmation) e['admin.password_confirmation'] = 'The passwords do not match.'
+  }
+  return e
+}
+
+/** Shows this step's problems under the fields; true when the step is complete. */
+function validateStep(i) {
+  const e = checkStep(i)
+  // Keep errors from other steps, replace this step's
+  const others = Object.fromEntries(Object.entries(form.errors.value).filter(([k]) => !stepKeys(i).includes(k)))
+  form.errors.value = { ...others, ...e }
+  return Object.keys(e).length === 0
+}
+const stepKeys = (i) => [...stepFields[i], ...(i === 2 ? ['admin.password_confirmation'] : [])]
+
+function next() {
+  if (validateStep(step.value)) step.value++
+}
+
+/** A message for errors that do not belong to a field on the form. */
+const generalError = ref('')
+
 async function submit() {
+  generalError.value = ''
+  // Check every step first and open the first one with a problem
+  const bad = [0, 1, 2].find((i) => !validateStep(i))
+  if (bad !== undefined) {
+    step.value = bad
+    return
+  }
   try {
     await form.submit(() => auth.registerOrganization(form.data))
     router.push({ name: 'pending' })
-  } catch {
-    // Jump back to the first step that has an error
-    const bad = stepFields.findIndex((fields) => fields.some((f) => form.errors.value[f]))
-    if (bad >= 0) step.value = bad
+  } catch (e) {
+    // Jump back to the first step that has an error from the server
+    const badStep = [0, 1, 2].findIndex((i) => stepKeys(i).some((f) => form.errors.value[f]))
+    if (badStep >= 0) step.value = badStep
+    else if (e?.status !== 500 && Object.keys(form.errors.value).length) {
+      generalError.value = Object.values(form.errors.value).join(' ')
+    }
   }
 }
 </script>
@@ -58,6 +119,7 @@ async function submit() {
   <div>
     <h1 class="text-3xl font-extrabold tracking-tight text-slate-900">Register your organization</h1>
     <p class="mt-2 text-slate-500">Join MedLink Ethiopia. Our team verifies your EFDA / Ministry of Health licence before you go live (usually 1-2 working days).</p>
+    <p class="mt-3 inline-flex items-center gap-2 rounded-full bg-gold-100 px-3 py-1 text-sm font-bold text-amber-800 ring-1 ring-gold-300">🎁 First month free on every plan · no payment needed to start</p>
 
     <!-- stepper -->
     <ol class="mt-8 flex items-center gap-2">
@@ -75,7 +137,8 @@ async function submit() {
       </li>
     </ol>
 
-    <form class="mt-8" @submit.prevent="step < 2 ? step++ : submit()">
+    <form class="mt-8" novalidate @submit.prevent="step < 2 ? next() : submit()">
+      <p v-if="generalError" class="mb-4 rounded-xl bg-rose-50 p-3 text-sm text-rose-700 ring-1 ring-rose-200">{{ generalError }}</p>
       <div v-show="step === 0" class="grid gap-4 sm:grid-cols-2">
         <div class="grid grid-cols-2 gap-3 sm:col-span-2">
           <button
@@ -155,7 +218,7 @@ async function submit() {
           <input v-model="form.data.admin.password" type="password" class="input" autocomplete="new-password" required />
           <PasswordStrength :password="form.data.admin.password" />
         </FormField>
-        <FormField label="Confirm password" required>
+        <FormField label="Confirm password" :error="err('admin.password_confirmation')" required>
           <input v-model="form.data.admin.password_confirmation" type="password" class="input" autocomplete="new-password" required />
         </FormField>
       </div>

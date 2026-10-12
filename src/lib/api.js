@@ -30,6 +30,7 @@ api.interceptors.response.use(
     const code = error.response?.data?.code
     if (status === 401 && tokenStorage.get()) sessionListeners.forEach((fn) => fn('expired'))
     if (status === 403 && code?.startsWith('tenant_')) sessionListeners.forEach((fn) => fn(code))
+    if (status === 402 && code === 'subscription_expired') sessionListeners.forEach((fn) => fn(code))
     return Promise.reject(normalizeError(error))
   },
 )

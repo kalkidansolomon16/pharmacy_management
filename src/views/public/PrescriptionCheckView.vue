@@ -1,7 +1,7 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { BuildingStorefrontIcon, ClipboardDocumentCheckIcon, LockClosedIcon, MagnifyingGlassIcon } from '@heroicons/vue/24/outline'
+import { BuildingStorefrontIcon, ClipboardDocumentCheckIcon, LockClosedIcon, MagnifyingGlassIcon, MapPinIcon } from '@heroicons/vue/24/outline'
 import { CheckBadgeIcon, XCircleIcon } from '@heroicons/vue/24/solid'
 import api from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
@@ -11,6 +11,8 @@ import StatusBadge from '@/components/ui/StatusBadge.vue'
 import AppSpinner from '@/components/ui/AppSpinner.vue'
 import MedicineAvatar from '@/components/ui/MedicineAvatar.vue'
 import PharmacyCard from '@/components/public/PharmacyCard.vue'
+import PharmaciesMap from '@/components/maps/PharmaciesMap.vue'
+import { useUserLocation } from '@/composables/useUserLocation'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -21,13 +23,17 @@ const phone = ref(auth.user?.phone ?? '')
 const loading = ref(false)
 const error = ref('')
 const result = ref(null)
+const location = useUserLocation()
+const nearest = ref(false)
+const selected = ref(null)
+const origin = computed(() => (nearest.value && location.position.value ? { lat: location.position.value.lat, lng: location.position.value.lng } : null))
 
 async function check() {
   loading.value = true
   error.value = ''
   result.value = null
   try {
-    const { data } = await api.post('/public/prescriptions/verify', { code: code.value, phone: phone.value })
+    const { data } = await api.post('/public/prescriptions/verify', { code: code.value, phone: phone.value, ...(origin.value ?? {}) })
     result.value = data.data
   } catch (e) {
     error.value = e.message
@@ -37,6 +43,19 @@ async function check() {
 }
 
 onMounted(() => code.value && phone.value && check())
+
+/** Re-rank the pharmacies that have every item by distance from the patient. */
+async function sortByDistance() {
+  try {
+    await location.locate()
+    nearest.value = true
+    await check()
+  } catch (e) {
+    error.value = ''
+    locationError.value = e.message
+  }
+}
+const locationError = ref('')
 </script>
 
 <template>
@@ -95,7 +114,16 @@ onMounted(() => code.value && phone.value && check())
         </div>
 
         <div v-if="result.prescription.is_dispensable">
-          <h2 class="flex items-center gap-2 text-lg font-bold text-slate-900"><BuildingStorefrontIcon class="size-6 text-brand-600" /> Pharmacies with every item in stock</h2>
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <h2 class="flex items-center gap-2 text-lg font-bold text-slate-900"><BuildingStorefrontIcon class="size-6 text-brand-600" /> Pharmacies with every item in stock</h2>
+            <button v-if="result.pharmacies_with_all_items.length && !nearest" class="btn btn-secondary btn-sm" :disabled="location.locating.value" @click="sortByDistance">
+              <MapPinIcon class="size-4" /> {{ location.locating.value ? 'Locating…' : 'Nearest to me first' }}
+            </button>
+          </div>
+          <p v-if="locationError" class="mt-2 text-sm text-rose-600">{{ locationError }}</p>
+          <div v-if="result.pharmacies_with_all_items.length" class="card mt-4 h-72 overflow-hidden">
+            <PharmaciesMap :pharmacies="result.pharmacies_with_all_items" :origin="origin" :selected-id="selected" @select="(p) => (selected = p.id)" />
+          </div>
           <div v-if="result.pharmacies_with_all_items.length" class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <PharmacyCard v-for="p in result.pharmacies_with_all_items" :key="p.id" :pharmacy="p" />
           </div>

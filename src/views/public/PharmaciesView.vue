@@ -38,6 +38,7 @@ const delivery = chip('delivery')
           </select>
         </div>
         <div class="mt-4 flex flex-wrap gap-2">
+          <RouterLink :to="{ name: 'pharmacies.nearby' }" class="chip bg-gold-400 px-3.5 py-1.5 text-sm font-bold text-brand-950 ring-gold-400">📍 Near me (map)</RouterLink>
           <button class="chip px-3.5 py-1.5 text-sm" :class="open24 ? 'bg-gold-400 text-brand-950 ring-gold-400' : 'bg-white/5 text-white ring-white/20'" @click="open24 = !open24">🌙 Open 24 hours</button>
           <button class="chip px-3.5 py-1.5 text-sm" :class="delivery ? 'bg-gold-400 text-brand-950 ring-gold-400' : 'bg-white/5 text-white ring-white/20'" @click="delivery = !delivery">🛵 Delivery available</button>
         </div>

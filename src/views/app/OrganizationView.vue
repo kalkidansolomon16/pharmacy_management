@@ -11,6 +11,7 @@ import FormField from '@/components/ui/FormField.vue'
 import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 import StatusBadge from '@/components/ui/StatusBadge.vue'
 import AppSpinner from '@/components/ui/AppSpinner.vue'
+import LocationPicker from '@/components/maps/LocationPicker.vue'
 
 const auth = useAuthStore()
 const meta = useMetaStore()
@@ -73,6 +74,11 @@ function useMyLocation() {
             <FormField label="Latitude" :error="form.errors.value.latitude"><input v-model="form.data.latitude" class="input font-mono" /></FormField>
             <FormField label="Longitude" :error="form.errors.value.longitude"><input v-model="form.data.longitude" class="input font-mono" /></FormField>
             <button type="button" class="btn btn-secondary btn-sm w-fit" @click="useMyLocation"><MapPinIcon class="size-4" /> Use my current location</button>
+          </div>
+          <div class="mt-5">
+            <p class="mb-2 text-sm font-semibold text-slate-700">Pin on the map</p>
+            <p class="mb-3 text-xs text-slate-500">Patients searching <b>near me</b> only find you once your location is set. Put the pin on your entrance.</p>
+            <LocationPicker v-model:lat="form.data.latitude" v-model:lng="form.data.longitude" :label="form.data.name" />
           </div>
         </section>
         <section class="card card-pad">

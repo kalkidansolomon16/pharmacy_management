@@ -22,7 +22,7 @@ async function load() {
 }
 onMounted(load)
 
-const canCancel = computed(() => rx.value && ['active', 'partially_dispensed'].includes(rx.value.status) && (rx.value.doctor?.id === auth.user?.id || auth.hasRole('hospital_admin')))
+const canCancel = computed(() => rx.value && ['active', 'partially_dispensed'].includes(rx.value.status) && (rx.value.doctor?.id === auth.user?.id || auth.can('organization.manage')))
 const verifyUrl = computed(() => rx.value ? `${window.location.origin}/prescription-check?code=${rx.value.reference_code}` : '')
 
 async function cancel() {

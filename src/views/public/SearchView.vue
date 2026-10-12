@@ -1,6 +1,6 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
-import { AdjustmentsHorizontalIcon, MapPinIcon, ShieldExclamationIcon, XMarkIcon } from '@heroicons/vue/24/outline'
+import { computed, onMounted, ref, watch } from 'vue'
+import { AdjustmentsHorizontalIcon, ArrowTopRightOnSquareIcon, MapIcon, MapPinIcon, ShieldExclamationIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import { useList } from '@/composables/useList'
 import { useMetaStore } from '@/stores/meta'
 import { money, number } from '@/lib/format'
@@ -11,16 +11,62 @@ import AppPagination from '@/components/ui/AppPagination.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 import AddToCartButton from '@/components/public/AddToCartButton.vue'
+import PharmaciesMap from '@/components/maps/PharmaciesMap.vue'
+import { useUserLocation } from '@/composables/useUserLocation'
+import { directionsUrl, distanceLabel } from '@/lib/googleMaps'
+import { useUiStore } from '@/stores/ui'
 
 const meta = useMetaStore()
 const { t } = useI18n()
 const showFilters = ref(false)
 
-const { rows, meta: page, loading, filters, page: current } = useList('/public/medicines', {
+// Near me: the user's coordinates go to the API but never into the page URL (shared links stay private)
+const location = useUserLocation()
+const ui = useUiStore()
+const nearMe = ref(false)
+const radius = ref(10)
+const showMap = ref(false)
+const selectedPharmacy = ref(null)
+const searchUrl = () => {
+  const p = location.position.value
+  return nearMe.value && p ? `/public/medicines?${new URLSearchParams({ lat: p.lat.toFixed(5), lng: p.lng.toFixed(5), radius_km: radius.value })}` : '/public/medicines'
+}
+
+const { rows, meta: page, loading, filters, page: current, reload } = useList(searchUrl, {
   q: '', category: '', city: '', sub_city: '', min_price: '', max_price: '', rx: '', open_24: '', delivery: '', sort: 'relevance',
 }, { perPage: 10 })
 
 onMounted(() => meta.load())
+
+async function toggleNearMe() {
+  if (nearMe.value) {
+    nearMe.value = false
+    if (filters.sort === 'nearest') filters.sort = 'relevance'
+    return reload()
+  }
+  try {
+    await location.locate()
+    nearMe.value = true
+    filters.city = '' // distance replaces the city filter
+    filters.sort = 'nearest'
+    reload()
+  } catch (e) {
+    ui.error(e.message, 'Location')
+  }
+}
+watch(radius, () => nearMe.value && reload())
+
+/** Every pharmacy in the results, for the map (one pin each, with its cheapest matching item). */
+const mapPharmacies = computed(() => {
+  const byId = new Map()
+  for (const m of rows.value) {
+    for (const o of m.offers ?? []) {
+      if (!byId.has(o.pharmacy.id)) byId.set(o.pharmacy.id, { ...o.pharmacy, label: `${m.generic_name} ${m.strength} · ${money(o.price)}` })
+    }
+  }
+  return [...byId.values()]
+})
+const origin = computed(() => (nearMe.value && location.position.value ? { lat: location.position.value.lat, lng: location.position.value.lng } : null))
 
 const bool = (key) => ({
   get: () => filters[key] === '1' || filters[key] === 1 || filters[key] === true,
@@ -47,11 +93,15 @@ const stockLabel = (qty) => (qty > 50 ? 'Plenty in stock' : qty > 10 ? `${qty} l
         <p class="mt-1 text-slate-500">Live stock and prices from verified pharmacies. Expired stock is never shown.</p>
         <div class="mt-6 flex flex-col gap-3 sm:flex-row">
           <SearchInput v-model="filters.q" class="flex-1 [&_input]:h-12 [&_input]:text-base" :placeholder="t('hero.searchPlaceholder')" />
-          <select v-model="filters.city" class="input h-12 sm:w-52">
+          <select v-if="!nearMe" v-model="filters.city" class="input h-12 sm:w-52">
             <option value="">{{ t('hero.anyCity') }}</option>
             <option v-for="c in meta.citiesWithPharmacies" :key="c" :value="c">{{ c }}</option>
           </select>
+          <button class="btn h-12 shrink-0" :class="nearMe ? 'btn-primary' : 'btn-secondary'" :disabled="location.locating.value" @click="toggleNearMe">
+            <MapPinIcon class="size-5" /> {{ location.locating.value ? 'Locating…' : nearMe ? 'Near me ✓' : 'Near me' }}
+          </button>
           <select v-model="filters.sort" class="input h-12 sm:w-48">
+            <option v-if="nearMe" value="nearest">Nearest first</option>
             <option value="relevance">Sort: A–Z</option>
             <option value="price_asc">Lowest price</option>
             <option value="price_desc">Highest price</option>
@@ -60,6 +110,16 @@ const stockLabel = (qty) => (qty > 50 ? 'Plenty in stock' : qty > 10 ? `${qty} l
           <button class="btn btn-secondary h-12 lg:hidden" @click="showFilters = !showFilters">
             <AdjustmentsHorizontalIcon class="size-5" /> {{ t('common.filters') }} <span v-if="activeCount" class="chip bg-brand-600 text-white ring-0">{{ activeCount }}</span>
           </button>
+        </div>
+        <div v-if="nearMe" class="mt-3 flex flex-wrap items-center gap-2 text-sm text-slate-600">
+          <span class="chip bg-brand-50 text-brand-800 ring-brand-600/15"><MapPinIcon class="size-3.5" /> Pharmacies near your location</span>
+          <select v-model.number="radius" class="input h-9 w-auto py-1 text-sm">
+            <option v-for="km in [2, 5, 10, 25, 50]" :key="km" :value="km">within {{ km }} km</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" @click="showMap = !showMap"><MapIcon class="size-4" /> {{ showMap ? 'Hide map' : 'Show map' }}</button>
+        </div>
+        <div v-else class="mt-3">
+          <button class="btn btn-ghost btn-sm px-0 text-brand-700" @click="showMap = !showMap"><MapIcon class="size-4" /> {{ showMap ? 'Hide map' : 'See these pharmacies on a map' }}</button>
         </div>
       </div>
     </section>
@@ -126,6 +186,10 @@ const stockLabel = (qty) => (qty > 50 ? 'Plenty in stock' : qty > 10 ? `${qty} l
           <p v-if="loading" class="animate-pulse text-brand-700">Updating…</p>
         </div>
 
+        <div v-if="showMap" class="card mb-5 h-80 overflow-hidden sm:h-96">
+          <PharmaciesMap :pharmacies="mapPharmacies" :origin="origin" :selected-id="selectedPharmacy" @select="(p) => (selectedPharmacy = p.id)" />
+        </div>
+
         <div class="space-y-4" :class="loading && rows.length && 'opacity-60 transition'">
           <template v-if="loading && !rows.length">
             <div v-for="i in 4" :key="i" class="skeleton h-48 rounded-2xl" />
@@ -150,6 +214,7 @@ const stockLabel = (qty) => (qty > 50 ? 'Plenty in stock' : qty > 10 ? `${qty} l
                 <p class="text-xl font-extrabold text-slate-900">{{ money(m.min_price) }}</p>
                 <p v-if="m.max_price > m.min_price" class="text-xs text-slate-500">up to {{ money(m.max_price) }}</p>
                 <p class="mt-1 text-xs font-semibold text-brand-700">{{ m.pharmacies_count }} {{ m.pharmacies_count === 1 ? 'pharmacy' : 'pharmacies' }}</p>
+                <p v-if="m.nearest_km != null" class="text-xs font-bold text-sky-700">nearest {{ distanceLabel(m.nearest_km) }} away</p>
               </div>
             </div>
             <ul class="divide-y divide-slate-100 border-t border-slate-100 bg-slate-50/50">
@@ -162,6 +227,8 @@ const stockLabel = (qty) => (qty > 50 ? 'Plenty in stock' : qty > 10 ? `${qty} l
                     <span v-if="o.pharmacy.delivery_available" class="ml-1 rounded bg-brand-100 px-1 font-bold text-brand-700">Delivery</span>
                   </p>
                 </RouterLink>
+                <span v-if="o.pharmacy.distance_km != null" class="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-bold text-sky-700">{{ distanceLabel(o.pharmacy.distance_km) }}</span>
+                <a v-if="o.pharmacy.latitude" :href="directionsUrl(o.pharmacy, origin)" target="_blank" rel="noopener" class="inline-flex items-center gap-1 text-xs font-semibold text-sky-700 hover:underline">Directions <ArrowTopRightOnSquareIcon class="size-3" /></a>
                 <span class="text-xs font-semibold" :class="o.available_quantity > 10 ? 'text-emerald-600' : 'text-amber-600'">● {{ stockLabel(o.available_quantity) }}</span>
                 <span class="w-28 text-sm font-bold text-slate-900 sm:text-right">{{ money(o.price) }}</span>
                 <AddToCartButton :listing-id="o.pharmacy_medicine_id" :price="o.price" :available="o.available_quantity" :medicine="m" :pharmacy="o.pharmacy" />
@@ -170,7 +237,7 @@ const stockLabel = (qty) => (qty > 50 ? 'Plenty in stock' : qty > 10 ? `${qty} l
           </article>
 
           <div v-if="!loading && !rows.length" class="card py-16">
-            <EmptyState title="No medicines match your search" text="Try another spelling, a generic name (e.g. “Paracetamol” instead of a brand), or remove some filters.">
+            <EmptyState title="No medicines match your search" :text="nearMe ? `Nothing within ${radius} km of you. Try a larger distance, or turn off Near me.` : 'Try another spelling, a generic name (e.g. “Paracetamol” instead of a brand), or remove some filters.'">
               <button v-if="activeCount" class="btn btn-secondary btn-sm" @click="clearFilters"><XMarkIcon class="size-4" /> Clear filters</button>
             </EmptyState>
           </div>

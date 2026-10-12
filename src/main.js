@@ -23,6 +23,9 @@ onSessionProblem((reason) => {
     auth.clear()
     ui.info('Your session has ended. Please sign in again.')
     router.push({ name: 'login', query: { redirect: router.currentRoute.value.fullPath } })
+  } else if (reason === 'subscription_expired') {
+    ui.error('Your MedLink subscription has expired - records are read-only until it is renewed.', 'Subscription')
+    auth.fetchMe()
   } else {
     auth.blockedReason = reason
     if (router.currentRoute.value.name !== 'pending') router.push({ name: 'pending' })
@@ -30,3 +33,8 @@ onSessionProblem((reason) => {
 })
 
 app.mount('#app')
+
+// Offline-capable app shell (production builds only, so development hot reload is never cached)
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}))
+}

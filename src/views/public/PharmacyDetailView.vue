@@ -4,6 +4,10 @@ import { useRoute } from 'vue-router'
 import { ClockIcon, EnvelopeIcon, MapIcon, MapPinIcon, PhoneIcon, TruckIcon } from '@heroicons/vue/24/outline'
 import api from '@/lib/api'
 import { money, phone } from '@/lib/format'
+import { directionsUrl, distanceLabel, placeUrl } from '@/lib/googleMaps'
+import { Geo } from '@/lib/geo'
+import PharmaciesMap from '@/components/maps/PharmaciesMap.vue'
+import { useUserLocation } from '@/composables/useUserLocation'
 import { useList } from '@/composables/useList'
 import { useMetaStore } from '@/stores/meta'
 import SearchInput from '@/components/ui/SearchInput.vue'
@@ -29,9 +33,10 @@ onMounted(async () => {
   }
 })
 
-const mapUrl = computed(() => pharmacy.value?.latitude
-  ? `https://www.openstreetmap.org/?mlat=${pharmacy.value.latitude}&mlon=${pharmacy.value.longitude}#map=17/${pharmacy.value.latitude}/${pharmacy.value.longitude}`
-  : null)
+const mapUrl = computed(() => pharmacy.value?.latitude ? placeUrl(pharmacy.value.latitude, pharmacy.value.longitude) : null)
+const location = useUserLocation()
+const distance = computed(() => (pharmacy.value?.latitude && location.position.value ? Geo.distanceKm(location.position.value, { lat: Number(pharmacy.value.latitude), lng: Number(pharmacy.value.longitude) }) : null))
+const directions = computed(() => (pharmacy.value?.latitude ? directionsUrl(pharmacy.value, location.position.value) : null))
 const inStockOnly = computed({ get: () => filters.in_stock === '1', set: (v) => (filters.in_stock = v ? '1' : '') })
 </script>
 
@@ -58,10 +63,25 @@ const inStockOnly = computed({ get: () => filters.in_stock === '1', set: (v) => 
           <div class="flex flex-wrap gap-2">
             <a :href="`tel:${pharmacy.phone}`" class="btn btn-gold"><PhoneIcon class="size-4" /> {{ phone(pharmacy.phone) }}</a>
             <a v-if="mapUrl" :href="mapUrl" target="_blank" rel="noopener" class="btn border border-white/25 text-white hover:bg-white/10"><MapIcon class="size-4" /> Map</a>
+            <a v-if="directions" :href="directions" target="_blank" rel="noopener" class="btn border border-white/25 text-white hover:bg-white/10">Directions ↗</a>
           </div>
         </div>
         <div v-else class="mt-6 h-24 w-2/3 animate-pulse rounded-3xl bg-white/10" />
         <p v-if="pharmacy?.description" class="mt-6 max-w-3xl text-sm text-brand-100/75">{{ pharmacy.description }}</p>
+      </div>
+    </section>
+
+    <section v-if="pharmacy?.latitude" class="mx-auto max-w-7xl px-4 pt-8 sm:px-6">
+      <div class="card overflow-hidden">
+        <div class="h-64 sm:h-72"><PharmaciesMap :pharmacies="[{ ...pharmacy, distance_km: distance }]" :origin="location.position.value ? { lat: location.position.value.lat, lng: location.position.value.lng } : null" /></div>
+        <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-3 text-sm">
+          <span class="flex items-center gap-1.5 text-slate-600"><MapPinIcon class="size-4 text-brand-600" /> {{ [pharmacy.address_line, pharmacy.sub_city, pharmacy.city].filter(Boolean).join(', ') }}</span>
+          <span class="flex items-center gap-3">
+            <span v-if="distance !== null" class="rounded-full bg-sky-50 px-2.5 py-0.5 text-xs font-bold text-sky-700">{{ distanceLabel(distance) }} from you</span>
+            <button v-else class="text-xs font-semibold text-brand-700 hover:underline" @click="location.locate().catch(() => {})">How far is it from me?</button>
+            <a :href="directions" target="_blank" rel="noopener" class="btn btn-primary btn-sm">Get directions ↗</a>
+          </span>
+        </div>
       </div>
     </section>
 

@@ -14,7 +14,7 @@ import UserAvatar from '@/components/ui/UserAvatar.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
-const isDoctor = auth.hasRole('doctor')
+const isDoctor = auth.can('prescriptions.create')
 const { rows, meta, loading, filters, page } = useList('/prescriptions', { status: '', search: '', all: '' })
 
 const columns = [

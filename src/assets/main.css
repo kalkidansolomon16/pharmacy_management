@@ -50,6 +50,57 @@
     from { background-position: -400px 0; }
     to { background-position: 400px 0; }
   }
+
+  /* Home page motion */
+  --animate-hero-in: hero-in 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-drift: drift 18s ease-in-out infinite alternate;
+  --animate-gradient-flow: gradient-flow 6s ease-in-out infinite alternate;
+  --animate-ken-burns: ken-burns 16s ease-in-out infinite alternate;
+  --animate-pop-in: pop-in 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  --animate-pulse-ring: pulse-ring 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+
+  @keyframes hero-in {
+    from { opacity: 0; transform: translateY(24px); filter: blur(6px); }
+    to { opacity: 1; transform: translateY(0); filter: blur(0); }
+  }
+  @keyframes drift {
+    0% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(40px, 30px) scale(1.08); }
+    100% { transform: translate(-30px, 50px) scale(0.95); }
+  }
+  @keyframes gradient-flow {
+    from { background-position: 0% 50%; }
+    to { background-position: 100% 50%; }
+  }
+  @keyframes ken-burns {
+    from { transform: scale(1); }
+    to { transform: scale(1.08) translate(-1%, -1%); }
+  }
+  @keyframes pop-in {
+    from { opacity: 0; transform: translateY(16px) scale(0.92); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  @keyframes pulse-ring {
+    0% { box-shadow: 0 0 0 0 rgb(16 185 129 / 0.45); }
+    70%, 100% { box-shadow: 0 0 0 10px rgb(16 185 129 / 0); }
+  }
+}
+
+/* Scroll reveal: elements with [data-reveal] fade up when they enter the viewport (see HomeView v-reveal). */
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+[data-reveal].is-revealed {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal] { opacity: 1; transform: none; transition: none; }
+  .motion-safe-only, .animate-hero-in { animation: none !important; }
 }
 
 @layer base {
@@ -171,4 +222,8 @@
   body * { visibility: hidden; }
   .print-area, .print-area * { visibility: visible; }
   .print-area { position: absolute; inset: 0 auto auto 0; width: 100%; max-width: none; box-shadow: none !important; border: none !important; }
+  /* 80 mm thermal receipt printers (common at Ethiopian pharmacy counters) */
+  .print-area.receipt-80 { width: 72mm; padding: 0 2mm; font-size: 11px; }
 }
+
+@page receipt { size: 80mm auto; margin: 2mm; }

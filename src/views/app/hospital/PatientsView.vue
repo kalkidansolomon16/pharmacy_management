@@ -21,7 +21,8 @@ import AppSpinner from '@/components/ui/AppSpinner.vue'
 const auth = useAuthStore()
 const meta = useMetaStore()
 meta.load()
-const canManage = auth.can('patients.manage')
+const canCreate = auth.can('patients.create')
+const canEdit = auth.can('patients.update')
 
 const { rows, meta: page, loading, filters, page: current, reload } = useList('/patients', { search: '' })
 const editing = ref(null) // {} for new
@@ -54,7 +55,7 @@ const columns = [
 <template>
   <div>
     <PageHeader title="Patients" eyebrow="Hospital" subtitle="Patient register for your facility. The phone number lets patients verify and collect their prescriptions.">
-      <button v-if="canManage" class="btn btn-primary" @click="editing = {}"><PlusIcon class="size-4" /> Register patient</button>
+      <button v-if="canCreate" class="btn btn-primary" @click="editing = {}"><PlusIcon class="size-4" /> Register patient</button>
     </PageHeader>
 
     <div class="card overflow-hidden">
@@ -76,7 +77,7 @@ const columns = [
         <template #cell-actions="{ row }">
           <div class="flex justify-end gap-1" @click.stop>
             <RouterLink v-if="auth.can('prescriptions.create')" :to="{ name: 'app.prescriptions.new', query: { patient: row.id } }" class="btn btn-ghost btn-sm"><DocumentPlusIcon class="size-4" /> Prescribe</RouterLink>
-            <button v-if="canManage" class="btn-icon size-8" @click="editing = row"><PencilSquareIcon class="size-4" /></button>
+            <button v-if="canEdit" class="btn-icon size-8" @click="editing = row"><PencilSquareIcon class="size-4" /></button>
           </div>
         </template>
       </DataTable>

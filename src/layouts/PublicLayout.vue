@@ -117,6 +117,7 @@ watch(() => route.fullPath, () => (mobileOpen.value = false))
           <ul class="mt-4 space-y-2.5 text-sm">
             <li><RouterLink :to="{ name: 'search' }" class="hover:text-white">Find medicine</RouterLink></li>
             <li><RouterLink :to="{ name: 'pharmacies' }" class="hover:text-white">Pharmacy directory</RouterLink></li>
+            <li><RouterLink :to="{ name: 'pharmacies.nearby' }" class="hover:text-white">Pharmacies near me</RouterLink></li>
             <li><RouterLink :to="{ name: 'prescription-check' }" class="hover:text-white">Check a prescription</RouterLink></li>
             <li><RouterLink :to="{ name: 'register' }" class="hover:text-white">Create an account</RouterLink></li>
           </ul>
