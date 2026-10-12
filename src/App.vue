@@ -1,13 +1,10 @@
-<template>
-<router-view/>  
-</template>
-
-<script>
-export default {
-
-}
+<script setup>
+import ToastHost from '@/components/ui/ToastHost.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 </script>
 
-<style>
-
-</style>
+<template>
+  <RouterView />
+  <ToastHost />
+  <ConfirmDialog />
+</template>
