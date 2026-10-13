@@ -90,6 +90,9 @@ const timeText = (d) => d?.toLocaleTimeString([], { hour: '2-digit', minute: '2-
       <template v-if="status === 'pending'">
         Thanks for registering <b class="text-slate-800">{{ auth.tenant?.name }}</b>. Our team is checking your licence
         <b class="text-slate-800">{{ auth.tenant?.license_number }}</b>. We'll email you at <b class="text-slate-800">{{ auth.user?.email }}</b> and notify you here as soon as it's decided - usually within 1-2 working days.
+        <template v-if="auth.tenant?.in_house_pharmacies?.length">
+          Your pharmacy <b class="text-slate-800">{{ auth.tenant.in_house_pharmacies.map((p) => p.name).join(', ') }}</b> is checked too - its pharmacist in charge signs in with their own email.
+        </template>
       </template>
       <template v-else-if="status === 'rejected'">
         We could not approve <b class="text-slate-800">{{ auth.tenant?.name }}</b> yet.

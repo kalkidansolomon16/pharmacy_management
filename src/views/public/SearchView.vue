@@ -12,6 +12,7 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 import AddToCartButton from '@/components/public/AddToCartButton.vue'
 import PharmaciesMap from '@/components/maps/PharmaciesMap.vue'
+import CitySelect from '@/components/ui/CitySelect.vue'
 import { useUserLocation } from '@/composables/useUserLocation'
 import { directionsUrl, distanceLabel } from '@/lib/googleMaps'
 import { useUiStore } from '@/stores/ui'
@@ -93,10 +94,7 @@ const stockLabel = (qty) => (qty > 50 ? 'Plenty in stock' : qty > 10 ? `${qty} l
         <p class="mt-1 text-slate-500">Live stock and prices from verified pharmacies. Expired stock is never shown.</p>
         <div class="mt-6 flex flex-col gap-3 sm:flex-row">
           <SearchInput v-model="filters.q" class="flex-1 [&_input]:h-12 [&_input]:text-base" :placeholder="t('hero.searchPlaceholder')" />
-          <select v-if="!nearMe" v-model="filters.city" class="input h-12 sm:w-52">
-            <option value="">{{ t('hero.anyCity') }}</option>
-            <option v-for="c in meta.citiesWithPharmacies" :key="c" :value="c">{{ c }}</option>
-          </select>
+          <CitySelect v-if="!nearMe" v-model="filters.city" class="sm:w-52" :any-label="t('hero.anyCity')" />
           <button class="btn h-12 shrink-0" :class="nearMe ? 'btn-primary' : 'btn-secondary'" :disabled="location.locating.value" @click="toggleNearMe">
             <MapPinIcon class="size-5" /> {{ location.locating.value ? 'Locating…' : nearMe ? 'Near me ✓' : 'Near me' }}
           </button>

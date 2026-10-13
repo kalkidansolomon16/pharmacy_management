@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   ArrowPathIcon, BanknotesIcon, CheckCircleIcon, ClockIcon, DocumentTextIcon, PlusIcon, PrinterIcon, ReceiptRefundIcon, ShieldCheckIcon, TrashIcon,
@@ -34,8 +34,47 @@ meta.load()
 
 const { rows, meta: pageMeta, extra, loading, filters, page, reload } = useList('/invoices', { status: 'unpaid', fiscal: '', from: '', search: route.query.search ?? '' })
 const summary = computed(() => extra.value)
-const tab = ref(filters.fiscal ? 'fiscal' : filters.from ? 'today' : filters.status || 'all')
+// Pharmacies that take payments at the cashier: counter sales the pharmacist sent over
+const counterMode = computed(() => auth.hasModule('pharmacy') && !!auth.tenant?.settings?.pay_at_cashier && auth.can('billing.collect'))
+const counter = reactive({ rows: [], loading: false, current: null, method: 'cash', reference: '', paying: false })
+async function loadCounter() {
+  if (!counterMode.value) return
+  counter.loading = true
+  try {
+    counter.rows = (await api.get('/pos/counter-sales')).data.data
+  } finally {
+    counter.loading = false
+  }
+}
+function openCounter(order) {
+  Object.assign(counter, { current: order, method: 'cash', reference: '' })
+}
+async function collectCounter() {
+  counter.paying = true
+  try {
+    const { data } = await api.post(`/pos/counter-sales/${counter.current.id}/pay`, { method: counter.method, reference: counter.reference || null })
+    ui.success(data.message)
+    counter.current = null
+    loadCounter()
+    reload()
+    if (data.data.invoice?.id) open({ id: data.data.invoice.id }) // the fiscal receipt, ready to print
+  } catch (e) {
+    ui.error(e.message)
+  } finally {
+    counter.paying = false
+  }
+}
+const counterNeedsReference = computed(() => !['cash', 'insurance', 'credit'].includes(counter.method))
+let counterTimer
+onMounted(() => {
+  loadCounter()
+  counterTimer = setInterval(loadCounter, 15000)
+})
+onBeforeUnmount(() => clearInterval(counterTimer))
+
+const tab = ref(counterMode.value ? 'counter' : filters.fiscal ? 'fiscal' : filters.from ? 'today' : filters.status || 'all')
 const tabs = computed(() => [
+  ...(counterMode.value ? [{ value: 'counter', label: 'Pharmacy counter', count: counter.rows.length }] : []),
   { value: 'unpaid', label: 'To collect', count: summary.value.unpaid_count },
   { value: 'awaiting_approval', label: 'Awaiting insurer', count: summary.value.awaiting_approval },
   { value: 'today', label: "Today's invoices", count: summary.value.today?.invoices },
@@ -43,6 +82,7 @@ const tabs = computed(() => [
   { value: 'all', label: 'All' },
 ])
 watch(tab, (t) => {
+  if (t === 'counter') return loadCounter()
   Object.assign(filters, { status: ['unpaid', 'awaiting_approval'].includes(t) ? t : '', from: t === 'today' ? todayIso() : '', fiscal: t === 'fiscal' ? 'pending' : '' })
 })
 
@@ -176,7 +216,25 @@ const columns = [
       <SearchInput v-model="filters.search" placeholder="Invoice no., name or phone" class="w-72" />
     </div>
 
-    <div class="card overflow-hidden">
+    <!-- Counter sales waiting for payment (pay-at-cashier pharmacies) -->
+    <div v-if="tab === 'counter'" class="card overflow-hidden">
+      <ul class="divide-y divide-slate-100">
+        <li v-for="o in counter.rows" :key="o.id" class="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+          <div class="min-w-0">
+            <p><b class="font-mono text-lg">{{ o.order_number }}</b> <span class="ml-1 text-sm text-slate-600">{{ o.customer_name }}</span></p>
+            <p class="truncate text-xs text-slate-500">{{ (o.items ?? []).map((i) => `${i.medicine?.display_name ?? ''} ×${i.quantity}`).join(', ') }}</p>
+            <p class="text-xs text-slate-400">Sent {{ dateTime(o.created_at) }}<template v-if="o.created_by"> by {{ o.created_by }}</template></p>
+          </div>
+          <div class="flex items-center gap-3">
+            <b class="text-xl">{{ money(o.total_amount) }}</b>
+            <button class="btn btn-primary" @click="openCounter(o)"><BanknotesIcon class="size-4" /> Collect</button>
+          </div>
+        </li>
+        <li v-if="!counter.rows.length" class="px-5 py-12 text-center text-sm text-slate-500">{{ counter.loading ? 'Loading…' : 'No customers waiting. Sales the pharmacist sends appear here automatically.' }}</li>
+      </ul>
+    </div>
+
+    <div v-else class="card overflow-hidden">
       <DataTable :columns="columns" :rows="rows" :loading="loading" clickable empty-title="Nothing to collect" @row-click="open">
         <template #cell-number="{ row }">
           <p class="font-mono text-xs font-bold">{{ row.invoice_number }}</p>
@@ -199,6 +257,23 @@ const columns = [
       </DataTable>
       <AppPagination v-model="page" :meta="pageMeta" />
     </div>
+
+    <AppModal :open="!!counter.current" :title="`Collect ${counter.current?.order_number ?? ''}`" :subtitle="counter.current?.customer_name" size="sm" @close="counter.current = null">
+      <div v-if="counter.current" class="space-y-4">
+        <ul class="space-y-1 text-sm">
+          <li v-for="i in counter.current.items" :key="i.id" class="flex justify-between"><span>{{ i.medicine?.display_name }} ×{{ i.quantity }}</span><span>{{ money(i.line_total) }}</span></li>
+        </ul>
+        <p class="flex items-end justify-between border-t border-dashed border-slate-300 pt-3"><span class="text-sm text-slate-500">To pay</span><b class="text-3xl">{{ money(counter.current.total_amount) }}</b></p>
+        <div class="grid grid-cols-3 gap-1.5">
+          <button v-for="m in meta.paymentMethods" :key="m.value" class="rounded-xl border px-2 py-2 text-xs font-bold transition" :class="counter.method === m.value ? 'border-brand-500 bg-brand-600 text-white' : 'border-slate-200 bg-white text-slate-600'" @click="counter.method = m.value">{{ m.label.replace('Health insurance (CBHI / EHIS)', 'Insurance') }}</button>
+        </div>
+        <input v-if="counterNeedsReference" v-model="counter.reference" class="input font-mono" placeholder="Transaction reference (e.g. telebirr ID)" />
+      </div>
+      <template #footer>
+        <button class="btn btn-secondary" @click="counter.current = null">Cancel</button>
+        <button class="btn btn-primary" :disabled="counter.paying" @click="collectCounter"><AppSpinner v-if="counter.paying" /> Paid - issue receipt</button>
+      </template>
+    </AppModal>
 
     <!-- Invoice detail -->
     <AppModal :open="!!current" :title="current?.invoice_number" :subtitle="current?.customer_name" size="xl" @close="current = null">

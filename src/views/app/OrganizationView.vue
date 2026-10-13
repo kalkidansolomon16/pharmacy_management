@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { MapPinIcon } from '@heroicons/vue/24/outline'
 import api from '@/lib/api'
 import { phone } from '@/lib/format'
@@ -18,9 +18,31 @@ const meta = useMetaStore()
 const org = ref(null)
 const form = useForm({})
 
+// Specialties a hospital / clinic offers (patients filter and book by them)
+const specialties = ref([])
+const chosen = ref(new Set())
+const specialtySearch = ref('')
+const shownSpecialties = computed(() => {
+  const q = specialtySearch.value.trim().toLowerCase()
+  return q ? specialties.value.filter((s) => s.name.toLowerCase().includes(q)) : specialties.value
+})
+function toggleSpecialty(id) {
+  const next = new Set(chosen.value)
+  next.has(id) ? next.delete(id) : next.add(id)
+  chosen.value = next
+}
+
 onMounted(async () => {
   meta.load()
   org.value = (await api.get('/organization')).data.data
+  if (org.value.type === 'hospital') {
+    api.get('/organization/specialties').then(({ data }) => {
+      specialties.value = data.data.available
+      chosen.value = new Set(data.data.selected)
+      // Opened from the dashboard's "Choose specialties": jump to the section
+      if (location.hash === '#specialties') setTimeout(() => document.getElementById('specialties')?.scrollIntoView({ behavior: 'smooth' }), 100)
+    })
+  }
   form.reset({
     name: org.value.name, license_number: org.value.license_number, tin_number: org.value.tin_number ?? '', phone: phone(org.value.phone),
     email: org.value.email ?? '', region: org.value.region ?? 'Addis Ababa', city: org.value.city ?? '', sub_city: org.value.sub_city ?? '',
@@ -31,6 +53,9 @@ onMounted(async () => {
 
 async function save() {
   const data = await form.submit(() => api.put('/organization', form.data)).catch(() => null)
+  if (data && org.value?.type === 'hospital') {
+    await api.put('/organization/specialties', { specialty_ids: [...chosen.value] }).catch(() => null)
+  }
   if (data) {
     org.value = data.data
     auth.fetchMe()
@@ -89,6 +114,28 @@ function useMyLocation() {
             <ToggleSwitch v-if="org.type === 'pharmacy'" v-model="form.data.delivery_available" label="Home delivery" description="Customers can choose delivery at checkout" />
             <FormField label="About" hint="Shown on your public page"><textarea v-model="form.data.description" rows="3" class="input" /></FormField>
           </div>
+        </section>
+        <section v-if="org.type === 'hospital'" id="specialties" class="card card-pad scroll-mt-24">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 class="font-bold text-slate-900">Specialties</h2>
+              <p class="mt-1 text-sm text-slate-500">Tick what you offer. Patients find you by these in “near me” and when booking appointments.</p>
+            </div>
+            <span class="rounded-full bg-brand-50 px-3 py-1 text-sm font-bold text-brand-700">{{ chosen.size }} selected</span>
+          </div>
+          <input v-if="specialties.length > 10" v-model="specialtySearch" type="search" class="input mt-4" placeholder="Search specialties" />
+          <div class="mt-4 flex flex-wrap gap-2">
+            <button
+              v-for="s in shownSpecialties"
+              :key="s.id"
+              type="button"
+              class="rounded-full px-3.5 py-1.5 text-sm font-semibold ring-1 transition"
+              :class="chosen.has(s.id) ? 'bg-brand-600 text-white ring-brand-600' : 'bg-white text-slate-600 ring-slate-200 hover:ring-brand-400'"
+              :title="s.description || ''"
+              @click="toggleSpecialty(s.id)"
+            >{{ chosen.has(s.id) ? '✓ ' : '' }}{{ s.name }}</button>
+          </div>
+          <p class="mt-3 text-xs text-slate-500">Missing a specialty? Ask MedLink support - the list is managed by the MedLink team. Saved with <b>Save profile</b>.</p>
         </section>
       </div>
       <aside class="space-y-4 lg:sticky lg:top-24 lg:h-fit">

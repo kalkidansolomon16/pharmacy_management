@@ -48,6 +48,8 @@ onMounted(async () => {
 
 const editing = ref(null)
 const form = useForm({})
+// The role filter: the platform team sees every role; an organization only its own (type, modules, custom roles)
+const filterRoles = computed(() => (auth.isSuperAdmin ? Object.keys(ROLE_LABELS) : [...new Set([...roleOptions.value, ...(extra.value.assignable_roles ?? [])])]))
 const roleOptions = computed(() => {
   // The server says which roles fit this organization (its type and switched-on modules)
   if (!auth.isSuperAdmin) return extra.value.assignable_roles?.length ? extra.value.assignable_roles : auth.tenantType === 'pharmacy' ? ['pharmacy_admin', 'staff'] : ['hospital_admin', 'doctor']
@@ -102,7 +104,7 @@ const columns = [
     <div class="card overflow-hidden">
       <div class="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row">
         <SearchInput v-model="filters.search" class="flex-1" placeholder="Name, email or phone" />
-        <select v-model="filters.role" class="input sm:w-48"><option value="">All roles</option><option v-for="(l, r) in ROLE_LABELS" :key="r" :value="r">{{ l }}</option></select>
+        <select v-model="filters.role" class="input sm:w-48"><option value="">All roles</option><option v-for="r in filterRoles" :key="r" :value="r">{{ ROLE_LABELS[r] ?? extra.role_labels?.[r] ?? r }}</option></select>
         <select v-model="filters.status" class="input sm:w-40"><option value="">Any status</option><option value="active">Active</option><option value="inactive">Inactive</option><option value="suspended">Suspended</option></select>
       </div>
       <DataTable :columns="columns" :rows="rows" :loading="loading">

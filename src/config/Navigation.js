@@ -1,7 +1,7 @@
 import {
   ArchiveBoxIcon, ArrowsRightLeftIcon, BuildingOffice2Icon, BuildingStorefrontIcon, ChartBarSquareIcon,
   ClipboardDocumentListIcon, ClockIcon, DocumentPlusIcon, FingerPrintIcon, HomeModernIcon, QueueListIcon,
-  ShoppingBagIcon, Squares2X2Icon, UserGroupIcon, UsersIcon, BeakerIcon, CalculatorIcon,
+  CalendarDaysIcon, HeartIcon, ShoppingBagIcon, Squares2X2Icon, UserGroupIcon, UsersIcon, BeakerIcon, CalculatorIcon,
   BanknotesIcon, BuildingLibraryIcon, ClipboardDocumentCheckIcon, CogIcon, CreditCardIcon, DocumentChartBarIcon,
   InboxArrowDownIcon, LifebuoyIcon, LockClosedIcon, PresentationChartLineIcon, ReceiptPercentIcon,
   ShieldCheckIcon, TagIcon, TruckIcon, UserPlusIcon, MapPinIcon, KeyIcon,
@@ -21,6 +21,7 @@ export const navigation = [
       { key: 'nav.orders', to: { name: 'app.orders' }, also: ['app.order'], icon: ShoppingBagIcon, can: 'orders.view', module: 'pharmacy', badge: 'pendingOrders' },
       { key: 'nav.rxInbox', to: { name: 'app.rxinbox' }, icon: InboxArrowDownIcon, can: 'prescriptions.dispense', module: 'pharmacy', badge: 'rxInbox' },
       { key: 'nav.queue', to: { name: 'app.queue' }, also: ['app.visit'], icon: UserPlusIcon, can: 'visits.view', module: 'clinical', badge: 'waiting' },
+      { key: 'nav.appointments', to: { name: 'app.appointments' }, icon: CalendarDaysIcon, can: 'visits.view', module: 'clinical' },
       { key: 'nav.patients', to: { name: 'app.patients' }, icon: UsersIcon, can: 'patients.view', module: 'clinical' },
       { key: 'nav.prescriptions', to: { name: 'app.prescriptions' }, also: ['app.prescription'], icon: ClipboardDocumentListIcon, can: 'prescriptions.view', module: 'clinical' },
       { key: 'nav.newPrescription', to: { name: 'app.prescriptions.new' }, icon: DocumentPlusIcon, can: 'prescriptions.create', module: 'clinical' },
@@ -53,7 +54,9 @@ export const navigation = [
     section: 'section.platform',
     items: [
       { key: 'nav.tenants', to: { name: 'app.admin.tenants' }, icon: BuildingOffice2Icon, can: 'tenants.manage', badge: 'pendingTenants' },
+      { key: 'nav.allPatients', to: { name: 'app.admin.patients' }, icon: UsersIcon, can: 'tenants.manage' },
       { key: 'nav.catalog', to: { name: 'app.admin.catalog' }, icon: BeakerIcon, can: 'catalog.manage' },
+      { key: 'nav.specialties', to: { name: 'app.admin.specialties' }, icon: HeartIcon, can: 'tenants.manage' },
       { key: 'nav.platformBilling', to: { name: 'app.admin.billing' }, icon: CreditCardIcon, can: 'platform.plans' },
     ],
   },

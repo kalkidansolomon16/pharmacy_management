@@ -155,6 +155,10 @@ const prescribeLink = computed(() => ({
             <span v-else class="chip bg-slate-100 text-slate-600 ring-slate-500/15">Cash patient</span>
           </div>
         </div>
+        <p v-if="visit.fees_due" class="border-t border-rose-100 bg-rose-50 px-5 py-3 text-sm text-rose-800">
+          <b>Card / consultation fee not paid yet</b> - ETB {{ visit.fees_due.amount.toFixed(2) }} pending at the cashier ({{ visit.fees_due.invoices.join(', ') }}).
+          The consultation can start once it is paid.
+        </p>
         <div v-if="open" class="flex flex-wrap gap-2 border-t border-slate-100 bg-slate-50/60 px-5 py-3">
           <button v-if="auth.can('triage.record')" class="btn btn-secondary btn-sm" @click="triaging = visit"><HeartIcon class="size-4" /> Vital signs</button>
           <button v-if="isDoctor && visit.status !== 'in_consultation'" class="btn btn-secondary btn-sm" @click="act('start')"><PlayIcon class="size-4" /> Start consultation</button>

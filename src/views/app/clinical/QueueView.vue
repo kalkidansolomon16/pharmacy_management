@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArrowPathIcon, HeartIcon, PlayIcon, UserPlusIcon } from '@heroicons/vue/24/outline'
 import api from '@/lib/api'
+import { money } from '@/lib/format'
 import { useList } from '@/composables/useList'
 import { useForm } from '@/composables/useForm'
 import { useAuthStore } from '@/stores/auth'
@@ -116,7 +117,8 @@ const columns = [
     <div class="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
       <PillTabs v-model="filters.status" :tabs="tabs" />
       <div class="flex items-center gap-3">
-        <label v-if="isDoctor" class="flex items-center gap-2 text-sm font-semibold text-slate-600"><input v-model="filters.mine" type="checkbox" class="rounded" /> My patients</label>
+        <span v-if="extra.only_mine" class="text-sm font-semibold text-slate-600" title="Patients assigned to other doctors are on their own lists">Your patients + not yet assigned</span>
+        <label v-else-if="isDoctor" class="flex items-center gap-2 text-sm font-semibold text-slate-600"><input v-model="filters.mine" type="checkbox" class="rounded" /> My patients</label>
         <SearchInput v-model="filters.search" placeholder="Name, card no. or visit no." class="w-64" />
       </div>
     </div>
@@ -154,6 +156,7 @@ const columns = [
           <div class="flex flex-col items-start gap-1">
             <StatusBadge :status="row.status" />
             <StatusBadge v-if="row.priority === 'urgent'" status="urgent" />
+            <span v-if="row.fees_due" class="chip bg-rose-50 text-rose-700 ring-rose-300" :title="`Pending at the cashier: ${row.fees_due.invoices.join(', ')}`">Card fee unpaid · {{ money(row.fees_due.amount) }}</span>
           </div>
         </template>
         <template #cell-actions="{ row }">
