@@ -1,6 +1,6 @@
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { ArrowPathIcon, ClipboardDocumentCheckIcon, MinusIcon, PlusIcon, PrinterIcon, ShieldCheckIcon, ShieldExclamationIcon, SignalSlashIcon, TrashIcon, XMarkIcon } from '@heroicons/vue/24/outline'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { ArrowPathIcon, BanknotesIcon, ClipboardDocumentCheckIcon, MinusIcon, PlusIcon, PrinterIcon, ShieldCheckIcon, ShieldExclamationIcon, SignalSlashIcon, TrashIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import { CheckCircleIcon } from '@heroicons/vue/24/solid'
 import { useRoute } from 'vue-router'
 import api from '@/lib/api'
@@ -36,10 +36,43 @@ const errors = ref({})
 // Insurance / credit billing: the payer's share goes on the monthly claim, the patient pays the co-pay
 const coverage = reactive({ open: false, payers: [], payer_id: '', member_number: '', membership: null, checking: false })
 
+// Pay at the cashier: the pharmacist sends the sale, the cashier takes the money, then the medicine is handed over
+const payAtCashier = computed(() => !!auth.tenant?.settings?.pay_at_cashier)
+const sendsToCashier = computed(() => payAtCashier.value && offline.online)
+const sentTicket = ref(null)
+const atCashier = reactive({ waiting: [], paid: [], loading: false })
+async function loadCashierBoard() {
+  if (!payAtCashier.value) return
+  atCashier.loading = true
+  try {
+    const [w, p] = await Promise.all([api.get('/pos/counter-sales'), api.get('/pos/counter-sales', { params: { status: 'paid' } })])
+    atCashier.waiting = w.data.data
+    atCashier.paid = p.data.data.slice(0, 8)
+  } catch {
+    /* the board is a convenience; selling still works */
+  } finally {
+    atCashier.loading = false
+  }
+}
+async function cancelTicket(order) {
+  const ok = await ui.confirm({ title: `Cancel ${order.order_number}?`, message: 'The customer has not paid. Nothing was taken from stock.', confirmText: 'Cancel sale', danger: true })
+  if (!ok) return
+  try {
+    ui.success((await api.post(`/pos/counter-sales/${order.id}/cancel`)).data.message)
+    loadCashierBoard()
+  } catch (e) {
+    ui.error(e.message)
+  }
+}
+let boardTimer
+onBeforeUnmount(() => clearInterval(boardTimer))
+
 const route = useRoute()
 onMounted(() => {
   meta.load()
   search()
+  loadCashierBoard()
+  boardTimer = setInterval(loadCashierBoard, 20000)
   // Opened from the e-Prescription inbox: load that prescription straight away
   if (route.query.rx) {
     rxCode.value = String(route.query.rx)
@@ -171,7 +204,12 @@ async function complete() {
   try {
     const { data } = await api.post('/pos/sales', payload)
     ui.success(data.message)
-    receipt.value = data.data
+    if (data.data.payment_status === 'unpaid') {
+      sentTicket.value = data.data // waiting at the cashier - no receipt yet
+      loadCashierBoard()
+    } else {
+      receipt.value = data.data
+    }
     lines.value = []
     clearRx()
     Object.assign(sale, { customer_name: '', customer_phone: '', payment_method: 'cash', discount: 0 })
@@ -180,7 +218,8 @@ async function complete() {
   } catch (e) {
     if (e.status === 0 && !payload.prescription_code) {
       // No connection (or a power cut at the router): keep the sale on this device and sync later
-      offline.enqueueSale(payload, { total: total.value, items: lines.value.length })
+      // Sold while offline: the money is taken here at the counter
+      offline.enqueueSale({ ...payload, recorded_offline: true }, { total: total.value, items: lines.value.length })
       receipt.value = offlineReceipt(payload)
       ui.info('No connection - sale saved on this device and will sync automatically.', 'Saved offline')
       lines.value = []
@@ -233,6 +272,36 @@ const printReceipt = () => window.print()
         <button v-if="offline.online && offline.pending" class="btn btn-secondary btn-sm" :disabled="offline.syncing" @click="syncNow">
           <ArrowPathIcon class="size-4" :class="offline.syncing && 'animate-spin'" /> Sync now
         </button>
+      </div>
+
+      <!-- Pay at the cashier: what is waiting and what can be handed over -->
+      <div v-if="payAtCashier" class="card overflow-hidden">
+        <div class="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+          <span class="flex items-center gap-2 text-sm font-bold text-slate-700"><BanknotesIcon class="size-5 text-brand-600" /> At the cashier</span>
+          <button class="btn-icon size-8" :disabled="atCashier.loading" @click="loadCashierBoard"><ArrowPathIcon class="size-4" :class="atCashier.loading && 'animate-spin'" /></button>
+        </div>
+        <div class="grid gap-4 p-4 sm:grid-cols-2">
+          <div>
+            <p class="text-xs font-bold tracking-wide text-amber-700 uppercase">Waiting to pay ({{ atCashier.waiting.length }})</p>
+            <ul class="mt-2 space-y-1.5 text-sm">
+              <li v-for="o in atCashier.waiting" :key="o.id" class="flex items-center justify-between gap-2 rounded-xl bg-amber-50 px-3 py-2">
+                <span class="min-w-0"><b class="font-mono">{{ o.order_number }}</b> <span class="block truncate text-xs text-slate-600">{{ o.customer_name }} · {{ money(o.total_amount) }}</span></span>
+                <button class="text-xs font-semibold text-rose-600 hover:underline" @click="cancelTicket(o)">Cancel</button>
+              </li>
+              <li v-if="!atCashier.waiting.length" class="text-xs text-slate-400">Nobody is waiting.</li>
+            </ul>
+          </div>
+          <div>
+            <p class="text-xs font-bold tracking-wide text-emerald-700 uppercase">Paid - hand over</p>
+            <ul class="mt-2 space-y-1.5 text-sm">
+              <li v-for="o in atCashier.paid" :key="o.id" class="rounded-xl bg-emerald-50 px-3 py-2">
+                <b class="font-mono">{{ o.order_number }}</b> <span class="text-emerald-700">✓ paid</span>
+                <span class="block truncate text-xs text-slate-600">{{ o.customer_name }} · {{ (o.items ?? []).map((i) => `${i.medicine?.display_name ?? ''} ×${i.fulfilled_quantity || i.quantity}`).join(', ') }}</span>
+              </li>
+              <li v-if="!atCashier.paid.length" class="text-xs text-slate-400">No paid sales yet today.</li>
+            </ul>
+          </div>
+        </div>
       </div>
 
       <!-- Prescription loader -->
@@ -336,7 +405,8 @@ const printReceipt = () => window.print()
             <p v-if="coverage.membership" class="text-xs text-slate-500">{{ coverage.membership.beneficiary_name }} · valid to {{ coverage.membership.valid_to || 'open' }} <button class="ml-1 font-semibold text-rose-600" @click="clearCoverage">remove</button></p>
           </div>
         </div>
-        <div class="grid grid-cols-3 gap-1.5">
+        <p v-if="sendsToCashier" class="rounded-xl bg-brand-50 px-3 py-2 text-xs text-brand-800">The customer pays at the <b>cashier</b>. Hand the medicine over once the sale shows as paid.</p>
+        <div v-else class="grid grid-cols-3 gap-1.5">
           <button v-for="p in meta.paymentMethods" :key="p.value" class="rounded-xl border px-2 py-2 text-xs font-bold transition" :class="sale.payment_method === p.value ? 'border-brand-500 bg-brand-600 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'" @click="sale.payment_method = p.value">
             {{ p.label.replace('Health insurance (CBHI / EHIS)', 'Insurance') }}
           </button>
@@ -350,10 +420,22 @@ const printReceipt = () => window.print()
           <span class="text-3xl font-extrabold tracking-tight text-slate-900">{{ money(total) }}</span>
         </div>
         <button class="btn btn-primary btn-lg w-full" :disabled="!lines.length || submitting" @click="complete">
-          <AppSpinner v-if="submitting" /><CheckCircleIcon v-else class="size-5" /> Complete sale
+          <AppSpinner v-if="submitting" /><CheckCircleIcon v-else class="size-5" /> {{ sendsToCashier ? 'Send to cashier' : 'Complete sale' }}
         </button>
       </div>
     </aside>
+
+    <AppModal :open="!!sentTicket" title="Sent to the cashier" size="sm" @close="sentTicket = null">
+      <div v-if="sentTicket" class="space-y-3 text-center">
+        <p class="text-sm text-slate-600">Ask the customer to pay at the cashier and give this number:</p>
+        <p class="font-mono text-3xl font-extrabold tracking-wider text-slate-900">{{ sentTicket.order_number }}</p>
+        <p class="text-2xl font-extrabold text-brand-700">{{ money(sentTicket.total_amount) }}</p>
+        <p class="text-xs text-slate-500">{{ sentTicket.customer_name }} · nothing leaves the shelf until it is paid</p>
+      </div>
+      <template #footer>
+        <button class="btn btn-primary" @click="sentTicket = null">Next customer</button>
+      </template>
+    </AppModal>
 
     <AppModal :open="!!receipt" :title="receipt?.offline ? 'Saved offline' : 'Sale complete'" size="sm" @close="receipt = null">
       <ReceiptPrint v-if="receipt" :order="receipt" />

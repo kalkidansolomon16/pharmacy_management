@@ -34,6 +34,7 @@ const tabs = computed(() => [
   { value: 'modules', label: 'Modules' },
   { value: 'tax', label: 'Tax & e-invoicing' },
   { value: 'workflow', label: 'Workflow' },
+  ...(auth.tenantType === 'hospital' ? [{ value: 'appointments', label: 'Online appointments' }] : []),
   ...(auth.can('owner.dashboard') ? [{ value: 'branches', label: 'Branches' }] : []),
   ...(auth.can('integrations.manage') ? [{ value: 'integrations', label: 'Integrations' }] : []),
 ])
@@ -65,6 +66,22 @@ function toggleModule(m, on) {
   save({ modules: [...next] })
 }
 const setSetting = (key, value) => save({ settings: { [key]: value } })
+
+// Online appointments: days of the week (ISO: Monday = 1)
+const WEEKDAYS = [[1, 'Mon'], [2, 'Tue'], [3, 'Wed'], [4, 'Thu'], [5, 'Fri'], [6, 'Sat'], [7, 'Sun']]
+function toggleDay(day) {
+  const days = new Set(settings.value.settings.appointment_days ?? [])
+  days.has(day) ? days.delete(day) : days.add(day)
+  if (!days.size) return ui.error('Keep at least one day open, or switch online appointments off.')
+  setSetting('appointment_days', [...days].sort())
+}
+const dailyCapacity = computed(() => {
+  const s = settings.value?.settings
+  if (!s?.appointment_open || !s?.appointment_close) return 0
+  const [oh, om] = s.appointment_open.split(':').map(Number)
+  const [ch, cm] = s.appointment_close.split(':').map(Number)
+  return Math.max(0, Math.floor((ch * 60 + cm - oh * 60 - om) / s.appointment_slot_minutes)) * s.appointments_per_slot
+})
 
 // Branches
 const branches = ref([])
@@ -131,11 +148,54 @@ const copy = (text) => navigator.clipboard?.writeText(text).then(() => ui.succes
       <section v-else-if="tab === 'workflow'" class="card card-pad max-w-2xl space-y-5">
         <ToggleSwitch :model-value="settings.settings.payment_before_service" label="Payment before service" description="The lab and pharmacy wait until the patient has paid at the cashier (insured patients are not blocked)." @update:model-value="(v) => setSetting('payment_before_service', v)" />
         <ToggleSwitch :model-value="settings.settings.registration_fee_on_check_in" label="Bill card & consultation fees at check-in" description="Uses the REG / CONS-* codes in the service price list." @update:model-value="(v) => setSetting('registration_fee_on_check_in', v)" />
+        <ToggleSwitch v-if="auth.hasModule('pharmacy')" :model-value="settings.settings.pay_at_cashier" label="Pay at the cashier (pharmacy counter)" description="The pharmacist sends each counter sale to the cashier; the cashier takes the money and only then is the medicine taken from stock and handed over. Sales made while offline are still paid at the counter." @update:model-value="(v) => setSetting('pay_at_cashier', v)" />
+        <ToggleSwitch v-if="auth.hasModule('clinical')" :model-value="settings.settings.card_fee_before_consultation" label="Card fee before consultation" description="The doctor can start a consultation only after the card / consultation fee is paid at the cashier. Emergencies are never blocked; insured patients only need to pay their co-pay share." @update:model-value="(v) => setSetting('card_fee_before_consultation', v)" />
         <ToggleSwitch :model-value="settings.settings.four_eyes_lab_verification" label="Four-eyes lab verification" description="A second lab professional must verify results before they are released." @update:model-value="(v) => setSetting('four_eyes_lab_verification', v)" />
         <div class="grid gap-4 border-t border-slate-100 pt-5 sm:grid-cols-2">
           <FormField label="DHIS2 organisation unit id" hint="From your woreda / zonal health office"><input :value="settings.settings.dhis2_org_unit" class="input font-mono" @change="setSetting('dhis2_org_unit', $event.target.value || null)" /></FormField>
           <FormField label="DHIS2 data set id"><input :value="settings.settings.dhis2_dataset" class="input font-mono" @change="setSetting('dhis2_dataset', $event.target.value || null)" /></FormField>
         </div>
+        <p v-if="saving" class="text-xs text-slate-500">Saving…</p>
+      </section>
+
+      <section v-else-if="tab === 'appointments'" class="card card-pad max-w-2xl space-y-5">
+        <ToggleSwitch
+          :model-value="settings.settings.appointments_enabled"
+          label="Patients can book appointments online"
+          description="From the MedLink website and mobile app. They see how busy each time is and book a free one; you check them in under Appointments."
+          @update:model-value="(v) => setSetting('appointments_enabled', v)"
+        />
+        <template v-if="settings.settings.appointments_enabled">
+          <div>
+            <p class="field-label">Days open for appointments</p>
+            <div class="flex flex-wrap gap-2">
+              <button
+                v-for="[d, label] in WEEKDAYS"
+                :key="d"
+                type="button"
+                class="rounded-xl px-3 py-2 text-sm font-bold ring-1"
+                :class="(settings.settings.appointment_days ?? []).includes(d) ? 'bg-brand-600 text-white ring-brand-600' : 'bg-white text-slate-500 ring-slate-200'"
+                @click="toggleDay(d)"
+              >{{ label }}</button>
+            </div>
+          </div>
+          <div class="grid gap-4 sm:grid-cols-2">
+            <FormField label="First appointment"><input :value="settings.settings.appointment_open" type="time" step="900" class="input" @change="setSetting('appointment_open', $event.target.value)" /></FormField>
+            <FormField label="Appointments end at"><input :value="settings.settings.appointment_close" type="time" step="900" class="input" @change="setSetting('appointment_close', $event.target.value)" /></FormField>
+            <FormField label="Length of each time slot">
+              <select :value="settings.settings.appointment_slot_minutes" class="input" @change="setSetting('appointment_slot_minutes', Number($event.target.value))">
+                <option v-for="m in [15, 20, 30, 45, 60]" :key="m" :value="m">{{ m }} minutes</option>
+              </select>
+            </FormField>
+            <FormField label="Patients per slot" hint="How many patients your doctors can see in one slot">
+              <input :value="settings.settings.appointments_per_slot" type="number" min="1" max="50" class="input" @change="setSetting('appointments_per_slot', Number($event.target.value))" />
+            </FormField>
+          </div>
+          <p class="rounded-xl bg-brand-50 p-3 text-sm text-brand-800">
+            Up to <b>{{ dailyCapacity }}</b> online appointments a day. Walk-in patients still come through the normal queue -
+            leave room for them by not booking every place online.
+          </p>
+        </template>
         <p v-if="saving" class="text-xs text-slate-500">Saving…</p>
       </section>
 

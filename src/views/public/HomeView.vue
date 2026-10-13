@@ -12,6 +12,7 @@ import { useMetaStore } from '@/stores/meta'
 import { compactNumber, money } from '@/lib/format'
 import CategoryIcon from '@/components/ui/CategoryIcon.vue'
 import PharmacyCard from '@/components/public/PharmacyCard.vue'
+import CitySelect from '@/components/ui/CitySelect.vue'
 
 const router = useRouter()
 const meta = useMetaStore()
@@ -25,6 +26,17 @@ const pharmacies = ref([])
 const popular = ['Paracetamol', 'Amoxicillin', 'Coartem', 'ORS', 'Metformin', 'Vitamin C', 'Salbutamol']
 
 const categoriesFailed = ref(false)
+
+// Find a specialist: hospital specialties (managed by the MedLink team) -> nearby hospitals offering it
+const specialties = ref([])
+api.get('/public/specialties').then(({ data }) => (specialties.value = data.data)).catch(() => {})
+const SPECIALTY_EMOJI = {
+  stethoscope: '🩺', 'heart-pulse': '💓', bone: '🦴', heart: '❤️', baby: '👶', pregnant: '🤰', scalpel: '🏥', brain: '🧠',
+  eye: '👁️', ear: '👂', tooth: '🦷', skin: '🧴', mind: '💭', kidney: '🫘', ribbon: '🎗️', physio: '🏃', xray: '🩻', lab: '🧪', ambulance: '🚑',
+}
+const showAllSpecialties = ref(false)
+// Specialties that some hospital offers come first
+const specialtyList = computed(() => [...specialties.value].sort((a, b) => (b.hospitals_count > 0) - (a.hospitals_count > 0)))
 function loadCategories() {
   categoriesFailed.value = false
   meta.load().catch(() => (categoriesFailed.value = true))
@@ -140,19 +152,19 @@ const payments = ['telebirr', 'CBE Birr', 'Chapa', 'Cash', 'CBHI insurance', 'Ba
           </h1>
           <p :style="heroIn(2)" class="animate-hero-in mt-5 max-w-xl text-lg leading-relaxed text-slate-600" :class="locale === 'am' && 'font-am'">{{ t('hero.subtitle') }}</p>
 
-          <form :style="heroIn(3)" class="animate-hero-in mt-8 rounded-3xl border border-slate-200/80 bg-white p-2 shadow-xl shadow-brand-900/10 transition-shadow duration-300 focus-within:shadow-2xl focus-within:shadow-brand-900/20" @submit.prevent="search()">
+          <form :style="heroIn(3)" class="animate-hero-in relative z-30 mt-8 rounded-3xl border border-slate-200/80 bg-white p-2 shadow-xl shadow-brand-900/10 transition-shadow duration-300 focus-within:shadow-2xl focus-within:shadow-brand-900/20" @submit.prevent="search()">
             <div class="flex flex-col gap-2 sm:flex-row">
               <label class="relative flex-1">
                 <MagnifyingGlassIcon class="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 text-brand-600" />
                 <input v-model="q" type="search" class="h-14 w-full rounded-2xl border-0 bg-transparent pr-4 pl-12 text-base text-slate-900 placeholder:text-slate-400 focus:ring-0 focus:outline-none" :placeholder="t('hero.searchPlaceholder')" />
               </label>
-              <label class="relative sm:w-48">
-                <MapPinIcon class="pointer-events-none absolute top-1/2 left-3.5 size-5 -translate-y-1/2 text-slate-400" />
-                <select v-model="city" class="h-14 w-full appearance-none rounded-2xl border-0 bg-slate-50 pr-4 pl-10 text-sm font-semibold text-slate-700 focus:ring-2 focus:ring-brand-500/30 focus:outline-none">
-                  <option value="">{{ t('hero.anyCity') }}</option>
-                  <option v-for="c in meta.citiesWithPharmacies" :key="c" :value="c">{{ c }}</option>
-                </select>
-              </label>
+              <CitySelect
+                v-model="city"
+                class="sm:w-48"
+                icon
+                :any-label="t('hero.anyCity')"
+                button-class="h-14 rounded-2xl bg-slate-50 px-3.5 text-sm font-semibold text-slate-700 focus:ring-2 focus:ring-brand-500/30 focus:outline-none"
+              />
               <button type="submit" class="btn btn-primary btn-lg h-14 px-7">{{ t('hero.search') }} <ArrowRightIcon class="size-5" /></button>
             </div>
           </form>
@@ -244,6 +256,36 @@ const payments = ['telebirr', 'CBE Birr', 'Chapa', 'Cash', 'CBHI insurance', 'Ba
         <template v-else-if="!meta.categories.length">
           <div v-for="i in 10" :key="i" class="skeleton h-[4.75rem] rounded-2xl" />
         </template>
+      </div>
+    </section>
+
+    <!-- FIND A SPECIALIST -->
+    <section v-if="specialties.length" class="mx-auto max-w-7xl px-4 pb-16 sm:px-6">
+      <div v-reveal class="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+        <div>
+          <p class="text-xs font-bold tracking-[0.16em] text-rose-600 uppercase">Hospitals & clinics</p>
+          <h2 class="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">Find a specialist near you</h2>
+          <p class="mt-1 text-slate-500">Choose what you need - we show only the nearby hospitals that offer it, nearest first.</p>
+        </div>
+        <RouterLink :to="{ name: 'pharmacies.nearby', query: { type: 'hospital' } }" class="btn btn-secondary">All hospitals near me <ArrowRightIcon class="size-4" /></RouterLink>
+      </div>
+      <div class="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <RouterLink
+          v-for="(s, i) in (showAllSpecialties ? specialtyList : specialtyList.slice(0, 10))"
+          :key="s.id"
+          :to="{ name: 'pharmacies.nearby', query: { type: 'hospital', specialty: s.slug } }"
+          v-reveal="(i % 5) * 70"
+          class="card card-hover group flex items-center gap-3 p-4"
+        >
+          <span class="grid size-11 shrink-0 place-items-center rounded-2xl bg-rose-50 text-xl transition duration-300 group-hover:scale-110">{{ SPECIALTY_EMOJI[s.icon] ?? '🏥' }}</span>
+          <span class="min-w-0">
+            <span class="block truncate text-sm font-bold text-slate-800">{{ s.name }}</span>
+            <span class="block truncate text-xs text-slate-400">{{ s.hospitals_count ? `${s.hospitals_count} ${s.hospitals_count === 1 ? 'hospital' : 'hospitals'}` : 'Coming soon' }}</span>
+          </span>
+        </RouterLink>
+      </div>
+      <div v-if="specialtyList.length > 10" class="mt-4 text-center">
+        <button class="btn btn-ghost" @click="showAllSpecialties = !showAllSpecialties">{{ showAllSpecialties ? 'Show fewer' : `Show all ${specialtyList.length} specialties` }}</button>
       </div>
     </section>
 

@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ArrowDownTrayIcon, CircleStackIcon, PencilSquareIcon, PlusIcon } from '@heroicons/vue/24/outline'
+import { useRoute } from 'vue-router'
 import api, { download } from '@/lib/api'
 import { money } from '@/lib/format'
 import { trialLabel } from '@/lib/trial'
@@ -26,9 +27,11 @@ const ui = useUiStore()
 const { date, dateTime } = useFormat()
 meta.load()
 
-const tab = ref('subscriptions')
+const route = useRoute()
+const tab = ref(route.hash === '#plan-requests' ? 'requests' : 'subscriptions')
 const tabs = computed(() => [
   { value: 'subscriptions', label: 'Subscriptions' },
+  { value: 'requests', label: pendingRequests.value ? `Plan change requests (${pendingRequests.value})` : 'Plan change requests' },
   { value: 'plans', label: 'Plans' },
   ...(auth.can('platform.backups') ? [{ value: 'backups', label: 'Backups' }] : []),
 ])
@@ -39,8 +42,58 @@ const plans = ref([])
 const loadPlans = async () => (plans.value = (await api.get('/admin/plans')).data.data)
 const backups = ref([])
 const loadBackups = async () => (backups.value = (await api.get('/admin/backups')).data.data)
+// Organizations asking to upgrade / downgrade
+const requests = ref([])
+const requestsMeta = ref({})
+const requestsPage = ref(1)
+const requestsFilter = ref('open')
+const pendingRequests = computed(() => requestsMeta.value.pending ?? 0)
+const loadRequests = async () => {
+  const { data } = await api.get('/admin/plan-change-requests', { params: { page: requestsPage.value, status: requestsFilter.value || undefined } })
+  requests.value = data.data
+  requestsMeta.value = data.meta
+}
+watch(requestsFilter, () => (requestsPage.value === 1 ? loadRequests() : (requestsPage.value = 1)))
+watch(requestsPage, loadRequests)
+const deciding = ref(null)
+async function decide(r, approve) {
+  const answer = await ui.confirm(approve
+    ? {
+        title: `Approve the ${r.direction} for ${r.tenant?.name}?`,
+        message: r.direction === 'downgrade' && r.subscription?.status === 'active'
+          ? `They move from ${r.from_plan?.name} to ${r.to_plan.name} when their paid period ends (${date(r.subscription.ends_at)}).`
+          : `They move from ${r.from_plan?.name ?? 'no plan'} to ${r.to_plan.name} now (${money(r.to_plan.price_monthly)} / month from their next payment).`,
+        confirmText: 'Approve',
+        input: { label: 'Note to the organization (optional)', required: false },
+      }
+    : { title: `Reject the request from ${r.tenant?.name}?`, message: 'They will see the reason in the app and by email.', confirmText: 'Reject', danger: true, input: { label: 'Reason', required: true } })
+  if (!answer) return
+  deciding.value = r.id
+  try {
+    const note = typeof answer === 'string' && answer.trim() ? answer.trim() : null
+    const res = approve
+      ? await api.post(`/admin/plan-change-requests/${r.id}/approve`, { note })
+      : await api.post(`/admin/plan-change-requests/${r.id}/reject`, { reason: note })
+    ui.success(res.data.message)
+    loadRequests()
+    subs.reload()
+  } catch (e) {
+    ui.error(e.message)
+  } finally {
+    deciding.value = null
+  }
+}
+const REQUEST_STATUS = {
+  pending: 'bg-amber-100 text-amber-800 ring-amber-300',
+  scheduled: 'bg-sky-100 text-sky-800 ring-sky-300',
+  applied: 'bg-emerald-100 text-emerald-800 ring-emerald-300',
+  rejected: 'bg-rose-100 text-rose-800 ring-rose-300',
+  cancelled: 'bg-slate-100 text-slate-600 ring-slate-300',
+}
+
 onMounted(() => {
   loadPlans()
+  loadRequests()
   if (auth.can('platform.backups')) loadBackups()
 })
 
@@ -127,6 +180,53 @@ const planColumns = [{ key: 'name', label: 'Plan' }, { key: 'price', label: 'ETB
         </template>
       </DataTable>
       <AppPagination v-model="subs.page.value" :meta="subs.meta.value" />
+    </div>
+
+    <div v-else-if="tab === 'requests'" id="plan-requests">
+      <div class="mb-3 flex flex-wrap items-center gap-3">
+        <select v-model="requestsFilter" class="input h-10 w-auto">
+          <option value="open">Waiting & scheduled</option>
+          <option value="pending">Waiting for a decision</option>
+          <option value="scheduled">Scheduled downgrades</option>
+          <option value="applied">Applied</option>
+          <option value="rejected">Rejected</option>
+          <option value="cancelled">Cancelled</option>
+          <option value="">All</option>
+        </select>
+        <p class="text-sm text-slate-500">Upgrades apply as soon as you approve. Downgrades wait until the paid period ends.</p>
+      </div>
+      <div class="card overflow-x-auto">
+        <table class="w-full min-w-[52rem] text-sm">
+          <thead class="bg-slate-50 text-left text-xs font-bold tracking-wide text-slate-500 uppercase">
+            <tr><th class="px-4 py-3">Organization</th><th class="px-4 py-3">Change</th><th class="px-4 py-3">Requested</th><th class="px-4 py-3">Status</th><th class="px-4 py-3"></th></tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <tr v-for="r in requests" :key="r.id" class="align-top">
+              <td class="px-4 py-3"><p class="font-semibold">{{ r.tenant?.name }}</p><p class="text-xs text-slate-500 capitalize">{{ r.tenant?.type }} · {{ r.tenant?.city }}</p></td>
+              <td class="px-4 py-3">
+                <p><span class="chip mr-1 capitalize" :class="r.direction === 'upgrade' ? 'bg-brand-50 text-brand-700 ring-brand-300' : 'bg-slate-100 text-slate-700 ring-slate-300'">{{ r.direction }}</span>{{ r.from_plan?.name ?? 'No plan' }} → <b>{{ r.to_plan.name }}</b></p>
+                <p class="mt-0.5 text-xs text-slate-500">{{ money(r.from_plan?.price_monthly ?? 0) }} → {{ money(r.to_plan.price_monthly) }} / month<template v-if="r.subscription?.ends_at"> · {{ r.subscription.status === 'trial' ? 'trial ends' : 'paid until' }} {{ date(r.subscription.ends_at) }}</template></p>
+                <p v-if="r.note" class="mt-1 text-xs text-slate-700"><b>Their note:</b> {{ r.note }}</p>
+                <p v-if="r.admin_note" class="mt-1 text-xs text-slate-700"><b>{{ r.status === 'rejected' ? 'Reason' : 'Your note' }}:</b> {{ r.admin_note }}</p>
+              </td>
+              <td class="px-4 py-3 text-slate-600">{{ date(r.created_at) }}<p v-if="r.requested_by" class="text-xs text-slate-500">{{ r.requested_by.name }}</p></td>
+              <td class="px-4 py-3">
+                <span class="chip capitalize" :class="REQUEST_STATUS[r.status]">{{ r.status === 'pending' ? 'waiting' : r.status }}</span>
+                <p v-if="r.status === 'scheduled'" class="mt-1 text-xs text-slate-500">on {{ date(r.effective_at) }}</p>
+                <p v-else-if="r.decided_by" class="mt-1 text-xs text-slate-500">by {{ r.decided_by }}</p>
+              </td>
+              <td class="px-4 py-3">
+                <div v-if="r.status === 'pending'" class="flex justify-end gap-1">
+                  <button class="btn btn-ghost btn-sm text-rose-600" :disabled="deciding === r.id" @click="decide(r, false)">Reject</button>
+                  <button class="btn btn-primary btn-sm" :disabled="deciding === r.id" @click="decide(r, true)"><AppSpinner v-if="deciding === r.id" /> Approve</button>
+                </div>
+              </td>
+            </tr>
+            <tr v-if="!requests.length"><td colspan="5" class="px-4 py-10 text-center text-slate-500">No plan change requests here.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <AppPagination v-model="requestsPage" :meta="requestsMeta" />
     </div>
 
     <div v-else-if="tab === 'plans'" class="card overflow-hidden">

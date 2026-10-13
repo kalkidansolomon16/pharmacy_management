@@ -6,6 +6,7 @@ import SearchInput from '@/components/ui/SearchInput.vue'
 import AppPagination from '@/components/ui/AppPagination.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import PharmacyCard from '@/components/public/PharmacyCard.vue'
+import CitySelect from '@/components/ui/CitySelect.vue'
 
 const meta = useMetaStore()
 onMounted(() => meta.load())
@@ -28,10 +29,7 @@ const delivery = chip('delivery')
         <p class="mt-2 max-w-2xl text-brand-100/75">Licensed community pharmacies across Ethiopia. Open one to browse everything it has in stock.</p>
         <div class="mt-8 grid gap-3 rounded-3xl bg-white/5 p-3 ring-1 ring-white/10 backdrop-blur sm:grid-cols-[1fr_12rem_12rem]">
           <SearchInput v-model="filters.q" placeholder="Pharmacy name or street…" class="[&_input]:h-12" />
-          <select v-model="filters.city" class="input h-12">
-            <option value="">All cities</option>
-            <option v-for="c in meta.citiesWithPharmacies" :key="c" :value="c">{{ c }}</option>
-          </select>
+          <CitySelect v-model="filters.city" any-label="All cities" />
           <select v-model="filters.sub_city" class="input h-12" :disabled="filters.city !== 'Addis Ababa'">
             <option value="">All sub-cities</option>
             <option v-for="s in meta.subCities" :key="s" :value="s">{{ s }}</option>

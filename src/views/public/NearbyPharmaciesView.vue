@@ -105,6 +105,7 @@ async function search() {
         radius_km: radius.value,
         open_24: open24.value ? 1 : undefined,
         delivery: delivery.value ? 1 : undefined,
+        specialty: type.value === 'hospital' && specialty.value ? specialty.value : undefined,
       },
     })
     if (id !== requestId) return // a newer search already started
@@ -119,7 +120,13 @@ async function search() {
   }
 }
 
-watch([origin, radius, open24, delivery, type], search)
+// Hospital specialties (Orthopedics & Spine, Cardiology...) - the list is managed by the MedLink team
+const specialty = ref(typeof route.query.specialty === 'string' ? route.query.specialty : '')
+const specialties = ref([])
+api.get('/public/specialties').then(({ data }) => (specialties.value = data.data)).catch(() => {})
+watch(specialty, (slug) => router.replace({ query: { ...route.query, specialty: slug || undefined } }).catch(() => {}))
+
+watch([origin, radius, open24, delivery, type, specialty], search)
 watch(type, (t) => {
   router.replace({ query: { ...route.query, type: t === 'pharmacy' ? undefined : t } }).catch(() => {})
   if (t === 'hospital') delivery.value = false // delivery is a pharmacy service
@@ -344,6 +351,13 @@ const mapErrorText = computed(() => {
           </select>
           <button class="chip px-3.5 py-1.5 text-sm" :class="open24 ? 'bg-gold-400 text-brand-950 ring-gold-400' : 'bg-white/5 text-white ring-white/20'" @click="open24 = !open24">🌙 Open 24 hours</button>
           <button class="chip px-3.5 py-1.5 text-sm" :class="delivery ? 'bg-gold-400 text-brand-950 ring-gold-400' : 'bg-white/5 text-white ring-white/20'" @click="delivery = !delivery" v-if="type !== 'hospital'">🛵 Delivery available</button>
+          <template v-if="type === 'hospital' && specialties.length">
+            <label class="sr-only" for="nearby-specialty">Specialty</label>
+            <select id="nearby-specialty" v-model="specialty" class="input h-11 w-auto max-w-[16rem]">
+              <option value="">All specialties</option>
+              <option v-for="s in specialties" :key="s.id" :value="s.slug">{{ s.name }}{{ s.hospitals_count ? ` (${s.hospitals_count})` : '' }}</option>
+            </select>
+          </template>
         </div>
         <p class="mt-3 text-sm text-brand-100/80" aria-live="polite">{{ locationText }}</p>
       </div>
@@ -408,6 +422,13 @@ const mapErrorText = computed(() => {
               <span v-if="p.services?.includes('laboratory')" class="chip bg-violet-50 text-violet-700 ring-violet-600/15"><BeakerIcon class="size-3.5" /> Laboratory</span>
               <span v-if="p.services?.includes('pharmacy')" class="chip bg-brand-50 text-brand-800 ring-brand-100">+ Pharmacy</span>
               <span v-if="p.services?.includes('insurance')" class="chip bg-sky-50 text-sky-700 ring-sky-600/15"><ShieldCheckIcon class="size-3.5" /> Insurance / CBHI</span>
+              <span
+                v-for="sp in (p.specialties ?? []).slice(0, 4)"
+                :key="sp.id"
+                class="chip ring-1"
+                :class="sp.slug === specialty ? 'bg-brand-600 text-white ring-brand-600' : 'bg-white text-slate-700 ring-slate-200'"
+              >{{ sp.name }}</span>
+              <span v-if="(p.specialties ?? []).length > 4" class="chip bg-slate-50 text-slate-500 ring-slate-200" :title="p.specialties.slice(4).map((x) => x.name).join(', ')">+{{ p.specialties.length - 4 }} more</span>
             </template>
             <template v-else>
               <span v-if="p.is_24_hours" class="chip bg-gold-100 text-brand-950 ring-gold-300"><ClockIcon class="size-3.5" /> 24/7</span>

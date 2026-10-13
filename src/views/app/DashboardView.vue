@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import { HeartIcon, MapPinIcon, PencilSquareIcon } from '@heroicons/vue/24/outline'
 import api from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
 import { useI18n } from '@/lib/i18n'
@@ -21,11 +22,26 @@ async function load() {
 }
 onMounted(load)
 
+// Hospitals & clinics: the specialties patients can find them by
+const mySpecialties = ref(null)
+onMounted(async () => {
+  if (auth.tenantType !== 'hospital') return
+  try {
+    const { data } = await api.get('/organization/specialties')
+    const chosen = new Set(data.data.selected)
+    mySpecialties.value = data.data.available.filter((s) => chosen.has(s.id))
+  } catch {
+    mySpecialties.value = null
+  }
+})
+
 const greeting = computed(() => {
   const h = new Date().getHours()
   if (locale.value === 'am') return h < 12 ? 'እንደምን አደሩ' : h < 18 ? 'እንደምን ዋሉ' : 'እንደምን አመሹ'
   return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'
 })
+const missingPin = computed(() => !!auth.tenant && (auth.tenant.latitude == null || auth.tenant.longitude == null))
+const canSetPin = computed(() => auth.can('organization.manage'))
 const firstName = computed(() => auth.user?.name?.replace(/^Dr\.?\s*/, 'Dr. ').split(' ').slice(0, auth.user?.name?.startsWith('Dr') ? 2 : 1).join(' '))
 </script>
 
@@ -58,6 +74,41 @@ const firstName = computed(() => auth.user?.name?.replace(/^Dr\.?\s*/, 'Dr. ').s
             <RouterLink :to="{ name: 'app.admin.tenants', query: { status: 'pending' } }" class="btn btn-gold">Review applications</RouterLink>
           </template>
         </div>
+      </div>
+    </div>
+
+    <!-- Organizations without a map pin are invisible to "near me" searches -->
+    <div v-if="missingPin" class="mb-6 flex flex-col gap-3 rounded-2xl bg-amber-50 p-4 ring-1 ring-amber-200 sm:flex-row sm:items-center">
+      <span class="grid size-11 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-700"><MapPinIcon class="size-6" /></span>
+      <div class="flex-1">
+        <p class="font-bold text-amber-900">Customers can't find you on the map yet</p>
+        <p class="text-sm text-amber-800">
+          {{ auth.tenant?.name }} has no map location, so it does not appear in <b>“near me”</b> searches, on the map or in directions - on the website and the mobile app.
+          <template v-if="!canSetPin"> Ask your organization administrator to set it.</template>
+        </p>
+      </div>
+      <RouterLink v-if="canSetPin" :to="{ name: 'app.organization' }" class="btn btn-primary shrink-0"><MapPinIcon class="size-4" /> Set my location</RouterLink>
+    </div>
+
+    <!-- Hospital specialties: what patients filter and book by -->
+    <div v-if="mySpecialties && !mySpecialties.length" class="mb-6 flex flex-col gap-3 rounded-2xl bg-amber-50 p-4 ring-1 ring-amber-200 sm:flex-row sm:items-center">
+      <span class="grid size-11 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-700"><HeartIcon class="size-6" /></span>
+      <div class="flex-1">
+        <p class="font-bold text-amber-900">No specialties chosen yet</p>
+        <p class="text-sm text-amber-800">
+          Patients who search for a specialty (e.g. Orthopedics & Spine, Pediatrics) on the website or the mobile app cannot find {{ auth.tenant?.name }} yet.
+          <template v-if="!canSetPin"> Ask your organization administrator to choose them.</template>
+        </p>
+      </div>
+      <RouterLink v-if="canSetPin" :to="{ name: 'app.organization', hash: '#specialties' }" class="btn btn-primary shrink-0"><HeartIcon class="size-4" /> Choose specialties</RouterLink>
+    </div>
+    <div v-else-if="mySpecialties?.length" class="card mb-6 p-4">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <p class="flex items-center gap-2 font-bold text-slate-900"><HeartIcon class="size-5 text-brand-600" /> Our specialties <span class="text-sm font-semibold text-slate-400">· patients find you by these</span></p>
+        <RouterLink v-if="canSetPin" :to="{ name: 'app.organization', hash: '#specialties' }" class="btn btn-secondary btn-sm"><PencilSquareIcon class="size-4" /> Edit</RouterLink>
+      </div>
+      <div class="mt-3 flex flex-wrap gap-2">
+        <span v-for="s in mySpecialties" :key="s.id" class="rounded-full bg-brand-50 px-3 py-1 text-sm font-semibold text-brand-800 ring-1 ring-brand-100">{{ s.name }}</span>
       </div>
     </div>
 

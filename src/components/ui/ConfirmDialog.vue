@@ -25,7 +25,7 @@ function accept() {
         </span>
         <div class="min-w-0 flex-1">
           <h3 class="text-base font-bold text-slate-900">{{ ui.confirmState.title }}</h3>
-          <p class="mt-1 text-sm text-slate-600">{{ ui.confirmState.message }}</p>
+          <p class="mt-1 text-sm whitespace-pre-line text-slate-600">{{ ui.confirmState.message }}</p>
           <div v-if="ui.confirmState.input" class="mt-4">
             <label class="field-label">{{ ui.confirmState.input.label }}</label>
             <textarea v-model="text" rows="2" class="input" :placeholder="ui.confirmState.input.placeholder" @keydown.enter.prevent="accept" />

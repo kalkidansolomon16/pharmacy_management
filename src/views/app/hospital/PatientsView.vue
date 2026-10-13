@@ -54,7 +54,7 @@ const columns = [
 
 <template>
   <div>
-    <PageHeader title="Patients" eyebrow="Hospital" subtitle="Patient register for your facility. The phone number lets patients verify and collect their prescriptions.">
+    <PageHeader title="Patients" eyebrow="Hospital" :subtitle="auth.hasRole('doctor') ? 'Your patients, and patients no doctor has seen yet. Patients of other doctors are on their own lists - reception can see everyone.' : 'Patient register for your facility. The phone number lets patients verify and collect their prescriptions.'">
       <button v-if="canCreate" class="btn btn-primary" @click="editing = {}"><PlusIcon class="size-4" /> Register patient</button>
     </PageHeader>
 

@@ -54,6 +54,7 @@ const routes = [
       { path: 'prescriptions/new', name: 'app.prescriptions.new', component: () => import('@/views/app/hospital/PrescriptionCreateView.vue'), meta: { can: 'prescriptions.create', module: 'clinical', title: 'Write prescription' } },
       { path: 'prescriptions/:id', name: 'app.prescription', component: () => import('@/views/app/hospital/PrescriptionDetailView.vue'), meta: { can: 'prescriptions.view', module: 'clinical', title: 'Prescription' } },
       // Patient journey (reception → triage → doctor → lab → cashier)
+      { path: 'appointments', name: 'app.appointments', component: () => import('@/views/app/clinical/AppointmentsView.vue'), meta: { can: 'visits.view', module: 'clinical', title: 'Appointments' } },
       { path: 'queue', name: 'app.queue', component: () => import('@/views/app/clinical/QueueView.vue'), meta: { can: 'visits.view', module: 'clinical', title: 'Patient queue' } },
       { path: 'visits/:id', name: 'app.visit', component: () => import('@/views/app/clinical/VisitView.vue'), meta: { can: 'visits.view', module: 'clinical', title: 'Visit' } },
       { path: 'lab', name: 'app.lab', component: () => import('@/views/app/lab/LabWorklistView.vue'), meta: { can: 'lab.view', module: 'lab', title: 'Laboratory' } },
@@ -80,6 +81,8 @@ const routes = [
       // Platform
       { path: 'admin/tenants', name: 'app.admin.tenants', component: () => import('@/views/app/admin/TenantsView.vue'), meta: { can: 'tenants.manage', title: 'Organizations' } },
       { path: 'catalog', name: 'app.catalog', component: () => import('@/views/app/admin/CatalogView.vue'), meta: { can: ['catalog.contribute', 'catalog.manage'], title: 'Medicine catalogue' } },
+      { path: 'admin/patients', name: 'app.admin.patients', component: () => import('@/views/app/admin/AdminPatientsView.vue'), meta: { can: 'tenants.manage', title: 'All patients' } },
+      { path: 'admin/specialties', name: 'app.admin.specialties', component: () => import('@/views/app/admin/SpecialtiesView.vue'), meta: { can: 'tenants.manage', title: 'Hospital specialties' } },
       { path: 'admin/catalog', name: 'app.admin.catalog', component: () => import('@/views/app/admin/CatalogView.vue'), meta: { can: 'catalog.manage', title: 'Medicine catalogue' } },
       // Shared
       { path: 'reports', name: 'app.reports', component: () => import('@/views/app/ReportsView.vue'), meta: { can: ['reports.view', 'prescriptions.create'], title: 'Reports' } },
